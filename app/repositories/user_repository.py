@@ -12,6 +12,14 @@ class UserRepository:
         )
         return cursor.fetchone()
 
+    def get_user_for_login(self, username: str):
+        cursor = self.db.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT user_id, username, hashed_password FROM users WHERE username = %s", 
+            (username,)
+        )
+        return cursor.fetchone()
+
     def get_by_all(self):
         cursor = self.db.cursor(dictionary=True)
         cursor.execute(
