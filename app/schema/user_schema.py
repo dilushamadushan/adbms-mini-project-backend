@@ -1,0 +1,41 @@
+from pydantic import BaseModel
+from typing import Optional
+
+class StaffUserCreate(BaseModel):
+    first_name: str
+    last_name: str
+    dept_id: Optional[int] = None
+    specialty: Optional[str] = None
+    role: str
+
+class StaffUserResponse(BaseModel):
+    user_id: int
+    staff_id: int
+    username: str
+    role: str
+    first_name: str
+    last_name: str
+    dept_id: Optional[int]
+    specialty: Optional[str]
+    raw_password: Optional[str] = None
+from datetime import date
+
+class PatientUserCreate(BaseModel):
+    first_name: str
+    last_name: str
+    dob: Optional[date] = None
+    blood_group: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    allergies: Optional[str] = None
+
+class PatientUserResponse(BaseModel):
+    user_id: int
+    patient_id: int
+    username: str
+    role: str
+    first_name: str
+    last_name: str
+    raw_password: Optional[str] = None
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
