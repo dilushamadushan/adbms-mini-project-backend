@@ -27,3 +27,5 @@ Thumbs.db
 # Project specific
 *.sqlite
 *.sqlite3
+
+concept.sql
