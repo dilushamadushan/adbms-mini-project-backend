@@ -2,7 +2,7 @@ import random
 import string
 import hashlib
 from app.core.database import get_db
-from app.repositories.user_repo import create_staff_user, create_patient_user, update_is_active, get_user_by_username, get_all_patients
+from app.repositories.user_repo import create_staff_user, create_patient_user, update_is_active, get_user_by_username, get_all_patients, get_all_staff
 from app.schema.user_schema import StaffUserCreate, StaffUserResponse, PatientUserCreate, PatientUserResponse
 
 def generate_username(first_name: str, last_name: str) -> str:
@@ -101,4 +101,7 @@ def loging_user(username:str, password:str) -> str:
 def GetAllPatients() -> list:
     with get_db() as conn:
         return get_all_patients(conn)
-    
+
+def GetAllStaff() -> list:
+    with get_db() as conn:
+        return get_all_staff(conn)

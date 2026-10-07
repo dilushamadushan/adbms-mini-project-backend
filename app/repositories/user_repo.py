@@ -63,8 +63,21 @@ def get_user_by_username(conn: MySQLConnection, username: str) -> dict:
 def get_all_patients(conn: MySQLConnection) -> list:
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("CALL GetAllPatients()")
-        return cursor.fetchall()
+        cursor.callproc("GetAllPatients")
+        results = []
+        for result in cursor.stored_results():
+            results.extend(result.fetchall())
+        return results
     finally:
         cursor.close()
-    
+
+def get_all_staff(conn: MySQLConnection) -> list:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("GetAllStaff")
+        results = []
+        for result in cursor.stored_results():
+            results.extend(result.fetchall())
+        return results
+    finally:
+        cursor.close()

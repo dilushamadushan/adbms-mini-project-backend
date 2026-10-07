@@ -25,3 +25,25 @@ BEGIN
 END //
 
 DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS GetAllStaff; //
+
+CREATE PROCEDURE GetAllStaff()
+BEGIN
+    SELECT 
+        s.staff_id,
+        s.first_name,
+        s.last_name,
+        s.dept_id,
+        s.specialty,
+        u.user_id,
+        u.username,
+        u.role,
+        u.is_active
+    FROM Staff s
+    INNER JOIN Users u ON s.user_id = u.user_id;
+END //
+
+DELIMITER ;

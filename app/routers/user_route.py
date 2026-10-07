@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from app.schema.user_schema import StaffUserCreate, StaffUserResponse, PatientUserCreate, PatientUserResponse, UserStatusUpdate
-from app.services.user_service import create_new_staff_user, create_new_patient_user, update_user_status, loging_user, GetAllPatients
+from app.services.user_service import create_new_staff_user, create_new_patient_user, update_user_status, loging_user, GetAllPatients, GetAllStaff
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -39,5 +39,12 @@ def user_login(username: str, password: str):
 def get_all_patients():
     try:
         return GetAllPatients()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/staff", response_model=list[StaffUserResponse], status_code=status.HTTP_200_OK)
+def get_all_staff():
+    try:
+        return GetAllStaff()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
