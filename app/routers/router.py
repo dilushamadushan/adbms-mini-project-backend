@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Response, status
 
 from app.core.database import ping_db
+from app.routers.auth_route import router as auth_router
 from app.routers.user_route import router as user_router
 
 router = APIRouter()
@@ -15,5 +16,5 @@ def health_check(response: Response):
         return {'status': 'error', 'database': 'unhealthy'}
 
 
-# Include all your modular routers here
+router.include_router(auth_router)
 router.include_router(user_router)

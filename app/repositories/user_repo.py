@@ -4,8 +4,8 @@ def create_staff_user(conn: MySQLConnection, user_data: dict, staff_data: dict) 
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            "INSERT INTO Users (username, password_hash, role) VALUES (%s, %s, %s)",
-            (user_data["username"], user_data["password_hash"], user_data["role"])
+            "INSERT INTO Users (username, email, password_hash, role) VALUES (%s, %s, %s, %s)",
+            (user_data["username"], user_data.get("email"), user_data["password_hash"], user_data["role"])
         )
         user_id = cursor.lastrowid
  
@@ -23,8 +23,8 @@ def create_patient_user(conn: MySQLConnection, user_data: dict, patient_data: di
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            "INSERT INTO Users (username, password_hash, role) VALUES (%s, %s, %s)",
-            (user_data["username"], user_data["password_hash"], user_data["role"])
+            "INSERT INTO Users (username, email, password_hash, role) VALUES (%s, %s, %s, %s)",
+            (user_data["username"], user_data.get("email"), user_data["password_hash"], user_data["role"])
         )
         user_id = cursor.lastrowid
 
