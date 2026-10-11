@@ -1,8 +1,11 @@
-USE dmd;
+CREATE DATABASE IF NOT EXISTS hms;
+
+USE hms;
 
 CREATE TABLE IF NOT EXISTS Users (
     user_id       INT AUTO_INCREMENT PRIMARY KEY,
     username      VARCHAR(100) NOT NULL UNIQUE,
+    email         VARCHAR(255) NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role          ENUM('doctor', 'nurse', 'receptionist', 'patient', 'admin') DEFAULT 'patient',
     is_active     BOOLEAN DEFAULT TRUE,
@@ -128,10 +131,10 @@ CREATE TABLE IF NOT EXISTS Vitals_Log (
     bp          VARCHAR(20),
     pulse       INT,
     temperature DECIMAL(5,2),
-    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (vital_id, recorded_at),
-    FOREIGN KEY (patient_id)  REFERENCES Patients(patient_id),
-    FOREIGN KEY (recorded_by) REFERENCES Staff(staff_id)
+    INDEX idx_vitals_patient (patient_id),
+    INDEX idx_vitals_staff (recorded_by)
 ) PARTITION BY RANGE (YEAR(recorded_at)) (
     PARTITION p0 VALUES LESS THAN (2025),
     PARTITION p1 VALUES LESS THAN (2026),
@@ -145,11 +148,21 @@ CREATE TABLE IF NOT EXISTS Audit_Logs (
     action_type    VARCHAR(50),
     resource_table VARCHAR(50),
     details        JSON,
-    timestamp      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    timestamp      DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (log_id, timestamp)
 ) PARTITION BY RANGE (YEAR(timestamp)) (
     PARTITION p0 VALUES LESS THAN (2025),
     PARTITION p1 VALUES LESS THAN (2026),
     PARTITION p2 VALUES LESS THAN (2027),
     PARTITION p3 VALUES LESS THAN MAXVALUE
+);
+
+CREATE TABLE IF NOT EXISTS Refresh_Tokens (
+    token_id     INT AUTO_INCREMENT PRIMARY KEY,
+    user_id      INT NOT NULL,
+    token_hash   VARCHAR(255) NOT NULL UNIQUE,
+    expires_at   DATETIME NOT NULL,
+    revoked      BOOLEAN DEFAULT FALSE,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );

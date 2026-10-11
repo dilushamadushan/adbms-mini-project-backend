@@ -1,9 +1,3 @@
-
--- ============================================================
--- Seed Data for Departments Table
--- ============================================================
-
--- Top-level (parent) departments
 INSERT INTO Departments (dept_name, parent_dept_id) VALUES
     ('Cardiology',          NULL),   -- 1
     ('General Medicine',    NULL),   -- 2
@@ -18,7 +12,6 @@ INSERT INTO Departments (dept_name, parent_dept_id) VALUES
     ('Pharmacy',            NULL),   -- 11
     ('Administration',      NULL);   -- 12
 
--- Sub-departments (linked via parent_dept_id)
 INSERT INTO Departments (dept_name, parent_dept_id) VALUES
     ('Interventional Cardiology', 1),   -- sub of Cardiology
     ('Cardiac ICU',               1),   -- sub of Cardiology
