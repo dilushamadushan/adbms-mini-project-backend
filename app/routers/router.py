@@ -2,6 +2,8 @@ from fastapi import APIRouter, Response, status
 
 from app.core.database import ping_db
 from app.routers.user_route import router as user_router
+from app.routers.Docter.docter_route import router as docter_router
+
 
 router = APIRouter()
 
@@ -17,3 +19,4 @@ def health_check(response: Response):
 
 # Include all your modular routers here
 router.include_router(user_router)
+router.include_router(docter_router)
