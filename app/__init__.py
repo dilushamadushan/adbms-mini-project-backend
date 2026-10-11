@@ -2,7 +2,9 @@ import logging
 import logging.config
 from contextlib import asynccontextmanager
 
+import os
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import close_connection_pool, init_connection_pool
 
@@ -28,6 +30,9 @@ app = FastAPI(
     description="database concept",
     lifespan=lifespan,
 )
+
+from app.core.middleware import setup_middlewares
+setup_middlewares(app)
 
 from app.routers.router import router as api_router
 app.include_router(api_router)
