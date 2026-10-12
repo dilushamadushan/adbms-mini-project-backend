@@ -45,6 +45,7 @@ def update_is_active(conn: MySQLConnection, user_id: int, is_active: bool) -> in
             "UPDATE Users SET is_active = %s WHERE user_id = %s",
             (is_active, user_id)
         )
+        conn.commit()
         return cursor.rowcount
     finally:
         cursor.close()

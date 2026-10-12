@@ -3,6 +3,7 @@ from fastapi import APIRouter, Response, status
 from app.core.database import ping_db
 from app.routers.auth_route import router as auth_router
 from app.routers.user_route import router as user_router
+from app.routers.department_route import router as department_router
 
 router = APIRouter()
 
@@ -18,3 +19,4 @@ def health_check(response: Response):
 
 router.include_router(auth_router)
 router.include_router(user_router)
+router.include_router(department_router)

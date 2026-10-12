@@ -21,6 +21,7 @@ class StaffUserResponse(BaseModel):
     dept_id: Optional[int] = None
     specialty: Optional[str] = None
     raw_password: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class PatientUserCreate(BaseModel):
     first_name: str
