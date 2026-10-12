@@ -132,3 +132,84 @@ BEGIN
 END //
 
 DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_department_hierarchy; //
+
+CREATE PROCEDURE sp_get_department_hierarchy()
+BEGIN
+    WITH RECURSIVE DepartmentHierarchy AS (
+        SELECT 
+            d.dept_id,
+            d.dept_name,
+            d.parent_dept_id,
+            CAST(d.dept_name AS CHAR(500)) AS hierarchy_path,
+            0 AS depth_level
+        FROM Departments d
+        WHERE d.parent_dept_id IS NULL
+
+        UNION ALL
+
+        SELECT 
+            c.dept_id,
+            c.dept_name,
+            c.parent_dept_id,
+            CONCAT(p.hierarchy_path, ' -> ', c.dept_name) AS hierarchy_path,
+            p.depth_level + 1 AS depth_level
+        FROM Departments c
+        INNER JOIN DepartmentHierarchy p ON c.parent_dept_id = p.dept_id
+    )
+    SELECT 
+        dh.dept_id,
+        dh.dept_name,
+        dh.parent_dept_id,
+        dh.hierarchy_path,
+        dh.depth_level,
+        COUNT(s.staff_id) AS staff_count
+    FROM DepartmentHierarchy dh
+    LEFT JOIN Staff s ON dh.dept_id = s.dept_id
+    GROUP BY dh.dept_id, dh.dept_name, dh.parent_dept_id, dh.hierarchy_path, dh.depth_level
+    ORDER BY dh.hierarchy_path ASC;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_delete_department; //
+
+CREATE PROCEDURE sp_delete_department(
+    IN p_dept_id INT
+)
+BEGIN
+    DECLARE v_sub_count INT DEFAULT 0;
+    DECLARE v_staff_count INT DEFAULT 0;
+    DECLARE v_exists INT DEFAULT 0;
+
+    START TRANSACTION;
+
+    SELECT COUNT(*) INTO v_exists FROM Departments WHERE dept_id = p_dept_id;
+    IF v_exists = 0 THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Department does not exist';
+    END IF;
+
+    SELECT COUNT(*) INTO v_sub_count FROM Departments WHERE parent_dept_id = p_dept_id;
+    IF v_sub_count > 0 THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot delete: Sub-departments depend on this department';
+    END IF;
+
+    SELECT COUNT(*) INTO v_staff_count FROM Staff WHERE dept_id = p_dept_id;
+    IF v_staff_count > 0 THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot delete: Staff members are assigned to this department';
+    END IF;
+
+    DELETE FROM Departments WHERE dept_id = p_dept_id;
+
+    COMMIT;
+END //
+
+DELIMITER ;

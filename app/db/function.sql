@@ -39,3 +39,49 @@ BEGIN
 END //
 
 DELIMITER ;
+
+DELIMITER //
+
+DROP FUNCTION IF EXISTS fn_get_department_depth; //
+
+CREATE FUNCTION fn_get_department_depth(p_dept_id INT)
+RETURNS INT
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_depth INT DEFAULT 0;
+    DECLARE v_current_parent INT;
+
+    SELECT parent_dept_id INTO v_current_parent 
+    FROM Departments 
+    WHERE dept_id = p_dept_id;
+
+    WHILE v_current_parent IS NOT NULL AND v_depth < 20 DO
+        SET v_depth = v_depth + 1;
+        SELECT parent_dept_id INTO v_current_parent 
+        FROM Departments 
+        WHERE dept_id = v_current_parent;
+    END WHILE;
+
+    RETURN v_depth;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP FUNCTION IF EXISTS fn_get_department_staff_count; //
+
+CREATE FUNCTION fn_get_department_staff_count(p_dept_id INT)
+RETURNS INT
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_count INT DEFAULT 0;
+    SELECT COUNT(*) INTO v_count FROM Staff WHERE dept_id = p_dept_id;
+    RETURN v_count;
+END //
+
+DELIMITER ;
+
+
