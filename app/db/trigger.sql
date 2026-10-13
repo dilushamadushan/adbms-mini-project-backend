@@ -138,4 +138,89 @@ END //
 
 DELIMITER ;
 
+DELIMITER //
+
+DROP TRIGGER IF EXISTS trg_notify_staff_created; //
+
+CREATE TRIGGER trg_notify_staff_created
+AFTER INSERT ON Staff
+FOR EACH ROW
+BEGIN
+    DECLARE v_dept_name VARCHAR(100);
+    SELECT dept_name INTO v_dept_name FROM Departments WHERE dept_id = NEW.dept_id;
+
+    INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+    VALUES (
+        'New Staff Member Added',
+        CONCAT(
+            'Staff member ', NEW.first_name, ' ', NEW.last_name,
+            IF(NEW.specialty IS NOT NULL AND NEW.specialty != '', CONCAT(' (', NEW.specialty, ')'), ''),
+            ' was assigned to department ', COALESCE(v_dept_name, CONCAT('ID #', NEW.dept_id)), '.'
+        ),
+        'STAFF_ADDED',
+        'admin',
+        JSON_OBJECT(
+            'staff_id', NEW.staff_id,
+            'user_id', NEW.user_id,
+            'dept_id', NEW.dept_id,
+            'dept_name', v_dept_name,
+            'name', CONCAT(NEW.first_name, ' ', NEW.last_name),
+            'specialty', NEW.specialty
+        ),
+        NOW()
+    );
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP TRIGGER IF EXISTS trg_notify_department_created; //
+
+CREATE TRIGGER trg_notify_department_created
+AFTER INSERT ON Departments
+FOR EACH ROW
+BEGIN
+    INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+    VALUES (
+        'New Department Created',
+        CONCAT('New department "', NEW.dept_name, '" (ID #', NEW.dept_id, ') has been established in the hospital.'),
+        'DEPARTMENT_ADDED',
+        'admin',
+        JSON_OBJECT(
+            'dept_id', NEW.dept_id,
+            'dept_name', NEW.dept_name,
+            'parent_dept_id', NEW.parent_dept_id
+        ),
+        NOW()
+    );
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP TRIGGER IF EXISTS trg_notify_department_deleted; //
+
+CREATE TRIGGER trg_notify_department_deleted
+AFTER DELETE ON Departments
+FOR EACH ROW
+BEGIN
+    INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+    VALUES (
+        'Department Removed',
+        CONCAT('Department "', OLD.dept_name, '" (ID #', OLD.dept_id, ') has been removed.'),
+        'DEPARTMENT_DELETED',
+        'admin',
+        JSON_OBJECT(
+            'dept_id', OLD.dept_id,
+            'dept_name', OLD.dept_name
+        ),
+        NOW()
+    );
+END //
+
+DELIMITER ;
+
+
 

@@ -213,3 +213,219 @@ BEGIN
 END //
 
 DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_generate_workload_report; //
+
+CREATE PROCEDURE sp_generate_workload_report(
+    IN p_start_date DATE,
+    IN p_end_date DATE,
+    IN p_top_n INT
+)
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        RESIGNAL;
+    END;
+
+    WITH DeptAggregates AS (
+        SELECT 
+            d.dept_id,
+            d.dept_name,
+            COUNT(DISTINCT s.staff_id) AS doctor_count,
+            COUNT(a.apt_id) AS total_appointments,
+            COUNT(DISTINCT a.patient_id) AS pts_seen,
+            SUM(COUNT(a.apt_id)) OVER () AS hospital_total_appts
+        FROM Departments d
+        LEFT JOIN Staff s ON s.dept_id = d.dept_id
+        LEFT JOIN Appointments a ON a.dept_id = d.dept_id
+            AND (p_start_date IS NULL OR a.apt_date >= p_start_date)
+            AND (p_end_date IS NULL OR a.apt_date <= p_end_date)
+        GROUP BY d.dept_id, d.dept_name
+    ),
+    DeptWorkloadMetrics AS (
+        SELECT 
+            dept_id,
+            dept_name,
+            doctor_count,
+            total_appointments,
+            pts_seen,
+            ROUND(
+                COALESCE((total_appointments * 100.0) / NULLIF(hospital_total_appts, 0), 0),
+                1
+            ) AS workload_percentage,
+            DENSE_RANK() OVER (ORDER BY total_appointments DESC) AS dept_rank
+        FROM DeptAggregates
+    )
+    SELECT 
+        dept_id,
+        dept_name,
+        doctor_count,
+        total_appointments,
+        pts_seen,
+        workload_percentage,
+        dept_rank,
+        fn_get_workload_level(total_appointments, workload_percentage) AS workload_level
+    FROM DeptWorkloadMetrics
+    ORDER BY total_appointments DESC, dept_name ASC;
+
+    WITH ProviderAggregates AS (
+        SELECT 
+            s.staff_id,
+            CONCAT('Dr. ', s.first_name, ' ', s.last_name) AS provider_name,
+            s.specialty,
+            d.dept_name,
+            COUNT(a.apt_id) AS pts_seen,
+            fn_calculate_provider_avg_time(s.staff_id) AS avg_time_minutes,
+            SUM(COUNT(a.apt_id)) OVER () AS total_provider_appts
+        FROM Staff s
+        LEFT JOIN Departments d ON s.dept_id = d.dept_id
+        LEFT JOIN Appointments a ON a.doctor_id = s.staff_id
+            AND (p_start_date IS NULL OR a.apt_date >= p_start_date)
+            AND (p_end_date IS NULL OR a.apt_date <= p_end_date)
+        GROUP BY s.staff_id, s.first_name, s.last_name, s.specialty, d.dept_name
+    ),
+    RankedProviders AS (
+        SELECT 
+            staff_id,
+            provider_name,
+            specialty,
+            dept_name,
+            pts_seen,
+            avg_time_minutes,
+            CONCAT(avg_time_minutes, 'm') AS avg_time_formatted,
+            DENSE_RANK() OVER (ORDER BY pts_seen DESC) AS workload_rank,
+            ROUND(
+                COALESCE((pts_seen * 100.0) / NULLIF(total_provider_appts, 0), 0),
+                1
+            ) AS share_percentage
+        FROM ProviderAggregates
+    )
+    SELECT 
+        staff_id,
+        provider_name,
+        specialty,
+        dept_name,
+        pts_seen,
+        avg_time_minutes,
+        avg_time_formatted,
+        workload_rank,
+        share_percentage
+    FROM RankedProviders
+    WHERE pts_seen > 0
+    ORDER BY workload_rank ASC, pts_seen DESC
+    LIMIT p_top_n;
+
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_hospital_kpi_overview; //
+
+CREATE PROCEDURE sp_get_hospital_kpi_overview(
+    IN p_target_date DATE
+)
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        RESIGNAL;
+    END;
+
+    IF p_target_date IS NULL THEN
+        SET p_target_date = CURDATE();
+    END IF;
+
+    WITH ApptStats AS (
+        SELECT
+            COUNT(*)                                                 AS total_appointments,
+            SUM(CASE WHEN status = 'Scheduled' THEN 1 ELSE 0 END)  AS scheduled_count,
+            SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END)  AS completed_count,
+            SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END)  AS cancelled_count,
+            SUM(CASE WHEN status = 'No-Show'   THEN 1 ELSE 0 END)  AS no_show_count
+        FROM Appointments
+        WHERE apt_date = p_target_date
+    )
+    SELECT
+        (SELECT COUNT(*) FROM Patients)                             AS total_patients,
+
+        (SELECT COUNT(*) FROM Beds)                                 AS total_beds,
+        (SELECT COUNT(*) FROM Beds WHERE status = 'Occupied')       AS occupied_beds,
+        (SELECT COUNT(*) FROM Beds WHERE status = 'Available')      AS available_beds,
+        (SELECT COUNT(*) FROM Beds WHERE status = 'Cleaning')       AS cleaning_beds,
+
+        fn_bed_occupancy_pct(NULL)                                  AS bed_occupancy_pct,
+        CONCAT(ROUND(fn_bed_occupancy_pct(NULL), 1), '%')           AS bed_occupancy_formatted,
+
+        a.total_appointments                                        AS todays_appointments,
+        a.scheduled_count                                           AS scheduled_today,
+        a.completed_count                                           AS completed_today,
+        a.cancelled_count                                           AS cancelled_today,
+        a.no_show_count                                             AS no_show_today,
+
+        p_target_date                                               AS target_date
+    FROM ApptStats a;
+
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_audit_logs; //
+
+CREATE PROCEDURE sp_get_audit_logs(
+    IN p_page   INT,
+    IN p_limit  INT,
+    IN p_actor  VARCHAR(100),
+    IN p_action VARCHAR(100),
+    IN p_risk   VARCHAR(20),
+    IN p_date   VARCHAR(20)
+)
+BEGIN
+    DECLARE v_offset INT;
+    DECLARE v_page INT DEFAULT 1;
+    DECLARE v_limit INT DEFAULT 10;
+
+    IF p_page IS NOT NULL AND p_page > 0 THEN
+        SET v_page = p_page;
+    END IF;
+    IF p_limit IS NOT NULL AND p_limit > 0 THEN
+        SET v_limit = p_limit;
+    END IF;
+    SET v_offset = (v_page - 1) * v_limit;
+
+    WITH FilteredLogs AS (
+        SELECT 
+            v.log_id,
+            v.timestamp,
+            v.raw_timestamp,
+            v.actor,
+            v.action,
+            v.resource,
+            v.risk,
+            v.details,
+            COUNT(*) OVER() AS total_count
+        FROM vw_audit_logs_enriched v
+        WHERE (p_actor IS NULL OR TRIM(p_actor) = '' OR v.actor LIKE CONCAT('%', TRIM(p_actor), '%'))
+          AND (p_action IS NULL OR TRIM(p_action) = '' OR v.action LIKE CONCAT('%', TRIM(p_action), '%'))
+          AND (p_risk IS NULL OR TRIM(p_risk) = '' OR UPPER(v.risk) = UPPER(TRIM(p_risk)))
+          AND (p_date IS NULL OR TRIM(p_date) = '' OR DATE(v.raw_timestamp) = DATE(TRIM(p_date)))
+    )
+    SELECT 
+        log_id,
+        timestamp,
+        actor,
+        action,
+        resource,
+        risk,
+        details,
+        total_count
+    FROM FilteredLogs
+    ORDER BY raw_timestamp DESC, log_id DESC
+    LIMIT v_limit OFFSET v_offset;
+END //
+
+DELIMITER ;

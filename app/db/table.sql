@@ -166,3 +166,18 @@ CREATE TABLE IF NOT EXISTS Refresh_Tokens (
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS Notifications (
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    title           VARCHAR(255) NOT NULL,
+    message         TEXT NOT NULL,
+    type            VARCHAR(50) DEFAULT 'INFO',
+    target_role     VARCHAR(50) DEFAULT 'admin',
+    target_user_id  INT NULL,
+    is_read         BOOLEAN DEFAULT FALSE,
+    details         JSON NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_notifications_role (target_role, is_read, created_at),
+    INDEX idx_notifications_user (target_user_id, is_read),
+    FOREIGN KEY (target_user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
