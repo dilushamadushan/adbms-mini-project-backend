@@ -23,3 +23,31 @@ def doctor_exists(conn: MySQLConnection, doctor_id: int) -> bool:
         return False
     finally:
         cursor.close()
+
+
+ #get the total number of appointment according to the doctor id
+
+def get_appointment_count(conn: MySQLConnection, doctor_id: int) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT Get_Total_Appointment_Count_According_To_Doctor(%s) AS appointment_count",
+            (doctor_id,),
+        )
+        row = cursor.fetchone()
+        return int(row["appointment_count"] or 0)
+    finally:
+        cursor.close()
+
+
+# get appointment history of a doctor
+def get_appointment_history_by_doctor(conn: MySQLConnection, doctor_id: int) -> list:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("GetAppointmentHistoryByDoctor", (doctor_id,))
+        results = []
+        for result in cursor.stored_results():
+            results.extend(result.fetchall())
+        return results
+    finally:
+        cursor.close()
