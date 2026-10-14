@@ -33,9 +33,6 @@ def get_all_departments_flat() -> List[Dict[str, Any]]:
 
 
 def get_department_catalog_tree() -> List[Dict[str, Any]]:
-    """
-    Returns full hierarchy of departments with nested sub_departments.
-    """
     with get_db() as conn:
         rows = department_repo.get_all_departments(conn)
 
@@ -91,7 +88,6 @@ def delete_department(dept_id: int) -> bool:
         except mysql.connector.Error as err:
             raise ValueError(err.msg)
         except Exception:
-            # Fallback to direct repository checks
             existing = department_repo.get_department_by_id(conn, dept_id)
             if not existing:
                 raise ValueError(f"Department with ID {dept_id} not found")

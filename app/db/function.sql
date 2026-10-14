@@ -186,5 +186,34 @@ END //
 
 DELIMITER ;
 
+DELIMITER //
+
+DROP FUNCTION IF EXISTS fn_bed_occupancy_pct; //
+
+CREATE FUNCTION fn_bed_occupancy_pct(p_ward_id INT)
+RETURNS DECIMAL(5,2)
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_total INT DEFAULT 0;
+    DECLARE v_occupied INT DEFAULT 0;
+
+    IF p_ward_id IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_total FROM Beds WHERE ward_id = p_ward_id;
+        SELECT COUNT(*) INTO v_occupied FROM Beds WHERE ward_id = p_ward_id AND status = 'Occupied';
+    ELSE
+        SELECT COUNT(*) INTO v_total FROM Beds;
+        SELECT COUNT(*) INTO v_occupied FROM Beds WHERE status = 'Occupied';
+    END IF;
+
+    IF v_total = 0 THEN
+        RETURN 0.00;
+    END IF;
+
+    RETURN ROUND((v_occupied * 100.0) / v_total, 2);
+END //
+
+DELIMITER ;
+
 
 

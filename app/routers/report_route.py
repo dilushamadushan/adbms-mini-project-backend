@@ -16,18 +16,6 @@ router = APIRouter(prefix="/reports", tags=["Reports & Analytics"])
     "/workload-summary",
     response_model=WorkloadReportResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get Hospital Workload & Provider Performance Summary",
-    description="""
-    Generates workload analytics report corresponding to the dashboard UI cards:
-    - **Department Workload**: Emergency, Cardiology, General Med, Orthopedics with status (Critical, High, Moderate, Low) and progress bar percentages.
-    - **Top Provider Workload**: Provider Name (Dr. ...), Pts Seen, Avg Time (e.g. 18m, 22m, 15m), and rank.
-    
-    **Advanced Database Concepts Employed**:
-    - Stored Procedure `sp_generate_workload_report`
-    - Common Table Expressions (CTEs)
-    - SQL Window Functions: `DENSE_RANK() OVER (...)`, `SUM() OVER ()`
-    - Deterministic Functions: `fn_calculate_provider_avg_time`, `fn_get_workload_level`
-    """,
 )
 def get_workload_summary_report(
     start_date: Optional[str] = Query(None, description="Optional start date filter (YYYY-MM-DD)"),
@@ -49,8 +37,6 @@ def get_workload_summary_report(
     "/departments/workload",
     response_model=DepartmentWorkloadResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get Department Workload Breakdown",
-    description="Fetches department workload metrics via database view `vw_department_workload` with normalized bar percentages.",
 )
 def get_department_workload():
     try:
@@ -66,8 +52,6 @@ def get_department_workload():
     "/providers/workload",
     response_model=ProviderWorkloadResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get Top Provider Workload Table",
-    description="Fetches top ranked providers with Patients Seen, Average Consultation Time, and ranking via database view `vw_top_provider_workload`.",
 )
 def get_top_providers_workload(
     limit: int = Query(5, ge=1, le=50, description="Maximum providers to return"),
@@ -85,8 +69,6 @@ def get_top_providers_workload(
     "/analytics/rollup",
     response_model=List[WorkloadRollupItem],
     status_code=status.HTTP_200_OK,
-    summary="Get Workload Hierarchy with SQL ROLLUP",
-    description="Advanced DB reporting query using MySQL `GROUP BY dept_name, status WITH ROLLUP` for subtotals and grand total.",
 )
 def get_workload_rollup():
     try:
@@ -101,8 +83,6 @@ def get_workload_rollup():
 @router.get(
     "/export/csv",
     status_code=status.HTTP_200_OK,
-    summary="Export Workload Report as CSV",
-    description="Generates downloadable CSV containing Department Workload and Provider Workload metrics.",
 )
 def export_workload_report_csv(
     start_date: Optional[str] = Query(None, description="Optional start date (YYYY-MM-DD)"),
@@ -129,22 +109,12 @@ def export_workload_report_csv(
     "/kpi-overview",
     response_model=HospitalKPIOverviewResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get Hospital Key Metrics (Total Patients, Bed Occupancy, Today's Appointments)",
-    description="""
-    Fetches real-time hospital executive dashboard metrics:
-    - **Total Patients**: Number of registered patients in the hospital system (`Patients`).
-    - **Bed Occupancy**: Real-time bed occupancy rate percentage and bed status counts (`Beds`).
-    - **Today's Appointments**: Total appointments scheduled and completed for today (`Appointments`).
-    
-    Accepts an optional `date` query parameter (YYYY-MM-DD), defaulting to `CURDATE()`.
-    """,
 )
+
 @router.get(
     "/dashboard-stats",
     response_model=HospitalKPIOverviewResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get Hospital Dashboard Stats (Alias)",
-    description="Alias for `/reports/kpi-overview` providing total patients, bed occupancy, and today's appointments.",
 )
 @router.get("/overview", response_model=HospitalKPIOverviewResponse, include_in_schema=False)
 @router.get("/stats", response_model=HospitalKPIOverviewResponse, include_in_schema=False)

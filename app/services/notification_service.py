@@ -12,9 +12,6 @@ def list_notifications(
     target_role: Optional[str] = None,
     target_user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """
-    Returns paginated notifications and unread count.
-    """
     page = max(1, page)
     limit = max(1, min(100, limit))
 

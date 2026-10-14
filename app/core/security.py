@@ -108,10 +108,6 @@ def get_current_user_payload(credentials: Optional[HTTPAuthorizationCredentials]
 
 
 def require_roles(*allowed_roles: str):
-    """
-    Dependency factory to enforce role-based access control (RBAC).
-    Example: Depends(require_roles("Admin", "Doctor"))
-    """
     def role_checker(payload: dict = Depends(get_current_user_payload)) -> dict:
         user_role = payload.get("role")
         if not user_role or user_role not in allowed_roles:

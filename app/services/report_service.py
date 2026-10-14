@@ -22,7 +22,6 @@ def _format_department_items(dept_rows: List[Dict[str, Any]]) -> List[Department
     if not dept_rows:
         return []
 
-    # Find maximum appointments across departments for normalizing UI progress bars
     max_appts = max((int(r.get("total_appointments") or 0) for r in dept_rows), default=1)
     if max_appts == 0:
         max_appts = 1
@@ -30,10 +29,8 @@ def _format_department_items(dept_rows: List[Dict[str, Any]]) -> List[Department
     formatted: List[DepartmentWorkloadItem] = []
     for r in dept_rows:
         total_appts = int(r.get("total_appointments") or 0)
-        # Normalize bar between 0 and 95% (or 100%) so UI progress bar looks proportional
         progress_pct = round((total_appts / max_appts) * 92.0, 1) if total_appts > 0 else 0.0
         
-        # Ensure minimum visible bar width for non-zero items (e.g. 10%)
         if total_appts > 0 and progress_pct < 10.0:
             progress_pct = 10.0
 
@@ -80,10 +77,6 @@ def generate_workload_report(
     end_date: Optional[str] = None,
     top_n: int = 5,
 ) -> WorkloadReportResponse:
-    """
-    Generates full workload report using advanced stored procedure sp_generate_workload_report.
-    Returns both Department Workload and Top Provider Workload matching the UI cards.
-    """
     with get_db() as conn:
         dept_rows, provider_rows = report_repo.get_workload_report_from_sp(
             conn, start_date=start_date, end_date=end_date, top_n=top_n
@@ -93,7 +86,6 @@ def generate_workload_report(
         )
 
     dept_items = _format_department_items(dept_rows)
-    # Filter departments with > 0 appointments or top departments
     active_depts = [d for d in dept_items if d.total_appointments > 0]
     if not active_depts:
         active_depts = dept_items[:6]
@@ -124,9 +116,6 @@ def generate_workload_report(
 
 
 def get_department_workload_summary() -> DepartmentWorkloadResponse:
-    """
-    Fetches department workload from MySQL View `vw_department_workload`.
-    """
     with get_db() as conn:
         rows = report_repo.get_department_workload_from_view(conn)
     items = _format_department_items(rows)
@@ -138,9 +127,6 @@ def get_department_workload_summary() -> DepartmentWorkloadResponse:
 
 
 def get_top_providers_summary(limit: int = 5) -> ProviderWorkloadResponse:
-    """
-    Fetches top providers ranked by patients seen from MySQL View `vw_top_provider_workload`.
-    """
     with get_db() as conn:
         rows = report_repo.get_top_providers_from_view(conn, limit=limit)
     items = _format_provider_items(rows)
@@ -151,9 +137,6 @@ def get_top_providers_summary(limit: int = 5) -> ProviderWorkloadResponse:
 
 
 def get_rollup_analytics() -> List[WorkloadRollupItem]:
-    """
-    Fetches subtotal and grand total analytics using MySQL GROUP BY ... WITH ROLLUP.
-    """
     with get_db() as conn:
         rows = report_repo.get_workload_with_rollup(conn)
     return [
@@ -171,9 +154,6 @@ def export_workload_csv(
     end_date: Optional[str] = None,
     top_n: int = 10,
 ) -> str:
-    """
-    Generates a structured CSV report representing the workload analytics.
-    """
     report = generate_workload_report(start_date=start_date, end_date=end_date, top_n=top_n)
 
     output = io.StringIO()
@@ -203,12 +183,6 @@ def export_workload_csv(
 
 
 def get_hospital_kpi_overview(target_date: Optional[str] = None) -> HospitalKPIOverviewResponse:
-    """
-    Retrieves high-level hospital KPIs:
-      - Total registered patients (total_patients)
-      - Bed occupancy percentage & count breakdown (bed_occupancy)
-      - Today's appointment counts (todays_appointments / today_appts)
-    """
     with get_db() as conn:
         data = report_repo.get_hospital_kpi_overview(conn, target_date=target_date)
 

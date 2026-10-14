@@ -14,8 +14,6 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
     "/unread-count",
     response_model=UnreadCountResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get Unread Notifications Count",
-    description="Returns the total number of unread notifications for the notification bell badge.",
 )
 def get_unread_count(
     role: Optional[str] = Query("admin", description="Target role (e.g. admin)"),
