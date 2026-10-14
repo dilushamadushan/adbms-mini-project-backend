@@ -7,6 +7,8 @@ from app.routers.department_route import router as department_router
 from app.routers.report_route import router as report_router
 from app.routers.audit_route import router as audit_router
 from app.routers.notification_route import router as notification_router
+from app.routers.Docter.docter_route import router as docter_router
+
 
 router = APIRouter()
 
@@ -27,3 +29,4 @@ router.include_router(report_router)
 router.include_router(audit_router)
 router.include_router(notification_router)
 
+router.include_router(docter_router)
