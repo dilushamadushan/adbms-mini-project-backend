@@ -35,7 +35,7 @@ END //
 
 
 DELIMITER //
-CREATE PROCEDURE GetAppointmentHistoryByDoctor(IN p_doctor_id INT)
+CREATE PROCEDURE IF NOT EXISTS GetAppointmentHistoryByDoctor(IN p_doctor_id INT)
 BEGIN
     SELECT
         a.apt_id,
