@@ -1,7 +1,10 @@
 import logging
 from typing import List
 from fastapi import APIRouter, HTTPException
-from app.schema.Docter.docter_schema import DoctorAppointmentResponse
+from app.schema.Docter.docter_schema import (
+    DoctorAppointmentResponse,
+    DoctorUpcomingAppointmentResponse,
+)
 from app.services.Docter import docter_service
 
 logger = logging.getLogger(__name__)
@@ -39,4 +42,15 @@ def get_appointment_history_by_doctor(doctor_id: int):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.exception("Failed to load doctor appointment history: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/upcoming-appointments/{doctor_id}", response_model=List[DoctorUpcomingAppointmentResponse])
+def get_upcoming_appointments_by_doctor(doctor_id: int):
+    try:
+        return docter_service.get_upcoming_appointments_by_doctor(doctor_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to load doctor upcoming appointments: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
