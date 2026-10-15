@@ -18,9 +18,9 @@ router = APIRouter(prefix="/reports", tags=["Reports & Analytics"])
     status_code=status.HTTP_200_OK,
 )
 def get_workload_summary_report(
-    start_date: Optional[str] = Query(None, description="Optional start date filter (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="Optional end date filter (YYYY-MM-DD)"),
-    top_n: int = Query(5, ge=1, le=50, description="Number of top providers to return"),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    top_n: int = Query(5, ge=1, le=50),
 ):
     try:
         return report_service.generate_workload_report(
@@ -54,7 +54,7 @@ def get_department_workload():
     status_code=status.HTTP_200_OK,
 )
 def get_top_providers_workload(
-    limit: int = Query(5, ge=1, le=50, description="Maximum providers to return"),
+    limit: int = Query(5, ge=1, le=50),
 ):
     try:
         return report_service.get_top_providers_summary(limit=limit)
@@ -85,8 +85,8 @@ def get_workload_rollup():
     status_code=status.HTTP_200_OK,
 )
 def export_workload_report_csv(
-    start_date: Optional[str] = Query(None, description="Optional start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="Optional end date (YYYY-MM-DD)"),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     top_n: int = Query(10, ge=1, le=100),
 ):
     try:
@@ -105,22 +105,13 @@ def export_workload_report_csv(
         )
 
 
-@router.get(
-    "/kpi-overview",
-    response_model=HospitalKPIOverviewResponse,
-    status_code=status.HTTP_200_OK,
-)
-
-@router.get(
-    "/dashboard-stats",
-    response_model=HospitalKPIOverviewResponse,
-    status_code=status.HTTP_200_OK,
-)
+@router.get("/kpi-overview", response_model=HospitalKPIOverviewResponse, status_code=status.HTTP_200_OK)
+@router.get("/dashboard-stats", response_model=HospitalKPIOverviewResponse, status_code=status.HTTP_200_OK)
 @router.get("/overview", response_model=HospitalKPIOverviewResponse, include_in_schema=False)
 @router.get("/stats", response_model=HospitalKPIOverviewResponse, include_in_schema=False)
 @router.get("/kpis", response_model=HospitalKPIOverviewResponse, include_in_schema=False)
 def get_hospital_kpi_overview(
-    target_date: Optional[str] = Query(None, alias="date", description="Optional date filter (YYYY-MM-DD), defaults to CURDATE()"),
+    target_date: Optional[str] = None,
 ):
     try:
         resolved_date = target_date if isinstance(target_date, str) else None

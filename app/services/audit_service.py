@@ -15,9 +15,6 @@ def list_audit_logs(
     risk: Optional[str] = None,
     date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Returns paginated audit logs with metadata.
-    """
     page = max(1, page)
     limit = max(1, min(100, limit))
 
@@ -36,7 +33,7 @@ def list_audit_logs(
 
     return {
         "items": items,
-        "logs": items,  # alias for frontends looking for .logs or .items
+        "logs": items,  
         "total": total,
         "page": page,
         "limit": limit,
@@ -45,9 +42,6 @@ def list_audit_logs(
 
 
 def get_recent_audit_logs(limit: int = 4) -> List[Dict[str, Any]]:
-    """
-    Returns recent audit logs widget data.
-    """
     limit = max(1, min(50, limit))
     with get_db() as conn:
         items, _ = audit_repo.get_audit_logs(
@@ -59,9 +53,6 @@ def get_recent_audit_logs(limit: int = 4) -> List[Dict[str, Any]]:
 
 
 def get_audit_log_by_id(log_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Retrieves full details of a specific audit log entry.
-    """
     with get_db() as conn:
         return audit_repo.get_audit_log_by_id(conn=conn, log_id=log_id)
 
@@ -72,9 +63,6 @@ def export_audit_logs_to_csv(
     risk: Optional[str] = None,
     date: Optional[str] = None,
 ) -> str:
-    """
-    Generates CSV content string from filtered audit logs.
-    """
     with get_db() as conn:
         logs = audit_repo.get_all_audit_logs_for_export(
             conn=conn,
@@ -87,7 +75,6 @@ def export_audit_logs_to_csv(
     output = io.StringIO()
     writer = csv.writer(output)
 
-    # Header
     writer.writerow(["Log ID", "Timestamp", "Actor", "Action", "Resource", "Risk", "Details"])
 
     for item in logs:

@@ -32,8 +32,6 @@ def get_unread_count(
     "/mark-all-read",
     response_model=NotificationActionResponse,
     status_code=status.HTTP_200_OK,
-    summary="Mark All Notifications as Read",
-    description="Updates all unread notifications to read status.",
 )
 def mark_all_as_read(
     role: Optional[str] = Query("admin", description="Target role (e.g. admin)"),
@@ -51,26 +49,8 @@ def mark_all_as_read(
         )
 
 
-@router.get(
-    "",
-    response_model=NotificationListResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get Notifications (Paginated)",
-    description="""
-    Retrieves hospital system notifications automatically created by database triggers:
-    - New staff member added (`STAFF_ADDED`)
-    - New department created (`DEPARTMENT_ADDED`)
-    - Department removed (`DEPARTMENT_DELETED`)
-    
-    Supports pagination and filtering by read status and event type.
-    """,
-)
-@router.get(
-    "/",
-    response_model=NotificationListResponse,
-    status_code=status.HTTP_200_OK,
-    include_in_schema=False,
-)
+@router.get("", response_model=NotificationListResponse, status_code=status.HTTP_200_OK)
+@router.get("/", response_model=NotificationListResponse, status_code=status.HTTP_200_OK, include_in_schema=False,)
 def get_notifications(
     page: int = Query(1, ge=1, description="Page index (1-based)"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
@@ -93,15 +73,8 @@ def get_notifications(
         )
 
 
-@router.patch(
-    "/{notification_id}/read",
-    response_model=NotificationActionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Mark Single Notification as Read",
-)
-def mark_notification_read(
-    notification_id: int,
-):
+@router.patch("/{notification_id}/read", response_model=NotificationActionResponse, status_code=status.HTTP_200_OK)
+def mark_notification_read(notification_id: int):
     try:
         success = notification_service.mark_as_read(notification_id=notification_id)
         if not success:
@@ -127,7 +100,6 @@ def mark_notification_read(
     "/{notification_id}",
     response_model=NotificationActionResponse,
     status_code=status.HTTP_200_OK,
-    summary="Delete Notification",
 )
 def delete_notification(
     notification_id: int,

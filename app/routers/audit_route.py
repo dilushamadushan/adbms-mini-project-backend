@@ -9,17 +9,8 @@ from app.services import audit_service
 
 router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"])
 
-
-@router.get(
-    "/recent",
-    response_model=List[AuditLogItem],
-    status_code=status.HTTP_200_OK,
-    summary="Get Recent Audit Logs Widget Data",
-    description="Returns the most recent audit logs for the admin dashboard widget (defaults to 4 items).",
-)
-def get_recent_audit_logs(
-    limit: int = Query(4, ge=1, le=50, description="Number of recent logs to return"),
-):
+@router.get("/recent",response_model=List[AuditLogItem],status_code=status.HTTP_200_OK)
+def get_recent_audit_logs(limit: int = Query(4, ge=1, le=50)):
     try:
         return audit_service.get_recent_audit_logs(limit=limit)
     except Exception as e:
@@ -29,17 +20,11 @@ def get_recent_audit_logs(
         )
 
 
-@router.get(
-    "/export",
-    status_code=status.HTTP_200_OK,
-    summary="Export Audit Logs as CSV",
-    description="Downloads filtered audit logs as a CSV file.",
-)
-def export_audit_logs(
-    actor: Optional[str] = Query(None, description="Filter by actor name or username"),
-    action: Optional[str] = Query(None, description="Filter by action type"),
-    risk: Optional[str] = Query(None, description="Filter by risk level (LOW, MEDIUM, HIGH)"),
-    date: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD)"),
+@router.get("/export",status_code=status.HTTP_200_OK)
+def export_audit_logs(actor: Optional[str] = None,
+    action: Optional[str] = None,
+    risk: Optional[str] = None,
+    date: Optional[str] = None,
 ):
     try:
         csv_data = audit_service.export_audit_logs_to_csv(
@@ -63,39 +48,15 @@ def export_audit_logs(
         )
 
 
-@router.get(
-    "",
-    response_model=AuditLogListResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get Full Audit Logs Table (Paginated)",
-    description="""
-    Retrieves paginated audit log entries for the Admin Audit Logs table.
-    
-    Supports filtering by:
-    - `page`: Page index (1-based, default 1)
-    - `limit`: Items per page (default 10)
-    - `actor`: Actor name or username (e.g. Dr. Sarah Jenkins or admin)
-    - `action`: Action type (e.g. LOGIN_SESSION_CREATED, DEPARTMENT_DELETED)
-    - `risk`: Risk level ('LOW', 'MEDIUM', 'HIGH')
-    - `date`: Specific date filter (YYYY-MM-DD)
-    
-    Employs MySQL Stored Procedure `sp_get_audit_logs`, Enriched View `vw_audit_logs_enriched`,
-    and deterministic risk function `fn_get_audit_risk`.
-    """,
-)
-@router.get(
-    "/",
-    response_model=AuditLogListResponse,
-    status_code=status.HTTP_200_OK,
-    include_in_schema=False,
-)
+@router.get("",response_model=AuditLogListResponse,status_code=status.HTTP_200_OK)
+@router.get("/",response_model=AuditLogListResponse,status_code=status.HTTP_200_OK,include_in_schema=False,)
 def get_audit_logs(
-    page: int = Query(1, ge=1, description="Page number (1-based)"),
-    limit: int = Query(10, ge=1, le=100, description="Items per page"),
-    actor: Optional[str] = Query(None, description="Filter by actor name or username"),
-    action: Optional[str] = Query(None, description="Filter by action type"),
-    risk: Optional[str] = Query(None, description="Filter by risk level (LOW, MEDIUM, HIGH)"),
-    date: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD)"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    actor: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    risk: Optional[str] = Query(None),
+    date: Optional[str] = Query(None),
 ):
     try:
         return audit_service.list_audit_logs(
@@ -113,16 +74,8 @@ def get_audit_logs(
         )
 
 
-@router.get(
-    "/{log_id}",
-    response_model=AuditLogDetailResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get Single Audit Log Details",
-    description="Retrieves complete information and full JSON details for a single audit log entry by ID.",
-)
-def get_single_audit_log(
-    log_id: int,
-):
+@router.get("/{log_id}",response_model=AuditLogDetailResponse,status_code=status.HTTP_200_OK)
+def get_single_audit_log(log_id: int):
     try:
         log = audit_service.get_audit_log_by_id(log_id=log_id)
         if not log:

@@ -41,7 +41,6 @@ def create_new_staff_user(data: StaffUserCreate, background_tasks: Optional[Back
     with get_db() as conn:
         ids = create_staff_user(conn, user_data, staff_data)
         
-    # Send credentials email to staff member
     if background_tasks is not None:
         background_tasks.add_task(
             send_staff_welcome_email,
@@ -99,7 +98,6 @@ def create_new_patient_user(data: PatientUserCreate, background_tasks: Optional[
     with get_db() as conn:
         ids = create_patient_user(conn, user_data, patient_data)
 
-    # Send credentials email to patient
     if background_tasks is not None:
         background_tasks.add_task(
             send_patient_welcome_email,
