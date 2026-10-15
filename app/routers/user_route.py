@@ -1,20 +1,26 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from app.schema.user_schema import StaffUserCreate, StaffUserResponse, PatientUserCreate, PatientUserResponse, UserStatusUpdate
-from app.services.user_service import create_new_staff_user, create_new_patient_user, update_user_status, loging_user, GetAllPatients, GetAllStaff
+from app.services.user_service import create_new_staff_user, create_new_patient_user, update_user_status, GetAllPatients, GetAllStaff
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+import mysql.connector
+
 @router.post("/staff", response_model=StaffUserResponse, status_code=status.HTTP_201_CREATED)
-def add_staff_member(payload: StaffUserCreate):
+def add_staff_member(payload: StaffUserCreate, background_tasks: BackgroundTasks):
     try:
-        return create_new_staff_user(payload)
+        return create_new_staff_user(payload, background_tasks=background_tasks)
+    except mysql.connector.IntegrityError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username or email already exists")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/patient", response_model=PatientUserResponse, status_code=status.HTTP_201_CREATED)
-def add_patient_member(payload: PatientUserCreate):
+def add_patient_member(payload: PatientUserCreate, background_tasks: BackgroundTasks):
     try:
-        return create_new_patient_user(payload)
+        return create_new_patient_user(payload, background_tasks=background_tasks)
+    except mysql.connector.IntegrityError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username or email already exists")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -25,13 +31,6 @@ def change_user_status(user_id: int, payload: UserStatusUpdate):
         return {"message": "User status updated successfully", "user_id": user_id, "is_active": payload.is_active}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/login", status_code=status.HTTP_200_OK)
-def user_login(username: str, password: str):
-    try:
-        return loging_user(username, password)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
