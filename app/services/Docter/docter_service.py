@@ -14,6 +14,18 @@ def get_appointment_count(doctor_id: int):
             raise ValueError("Doctor not found")
         return docter_repo.get_appointment_count(conn, doctor_id)
 
+def get_completed_appointment_count(doctor_id: int):
+    with get_db() as conn:
+        if not docter_repo.doctor_exists(conn, doctor_id):
+            raise ValueError("Doctor not found")
+        return docter_repo.get_completed_appointment_count(conn, doctor_id)
+
+def get_total_patients_count(doctor_id: int):
+    with get_db() as conn:
+        if not docter_repo.doctor_exists(conn, doctor_id):
+            raise ValueError("Doctor not found")
+        return docter_repo.get_total_patients_count(conn, doctor_id)
+
 def get_appointment_history_by_doctor(doctor_id: int):
     with get_db() as conn:
         if not docter_repo.doctor_exists(conn, doctor_id):

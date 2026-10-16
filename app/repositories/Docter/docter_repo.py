@@ -40,6 +40,34 @@ def get_appointment_count(conn: MySQLConnection, doctor_id: int) -> int:
         cursor.close()
 
 
+# get the total number of completed appointments for today according to the doctor id
+def get_completed_appointment_count(conn: MySQLConnection, doctor_id: int) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT Get_Total_Appointment_Count_According_To_Doctor_complted(%s) AS completed_count",
+            (doctor_id,),
+        )
+        row = cursor.fetchone()
+        return int(row["completed_count"] or 0)
+    finally:
+        cursor.close()
+
+
+# get the total number of patients by doctor id (scheduled and cancelled)
+def get_total_patients_count(conn: MySQLConnection, doctor_id: int) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT get_Total_Patients_count_by_docter(%s) AS patients_count",
+            (doctor_id,),
+        )
+        row = cursor.fetchone()
+        return int(row["patients_count"] or 0)
+    finally:
+        cursor.close()
+
+
 # get appointment history of a doctor
 def get_appointment_history_by_doctor(conn: MySQLConnection, doctor_id: int) -> list:
     cursor = conn.cursor(dictionary=True)
