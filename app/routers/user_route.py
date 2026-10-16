@@ -1,6 +1,7 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from app.schema.user_schema import StaffUserCreate, StaffUserResponse, PatientUserCreate, PatientUserResponse, UserStatusUpdate
-from app.services.user_service import create_new_staff_user, create_new_patient_user, update_user_status, GetAllPatients, GetAllStaff
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from app.core.security import get_current_user_payload
+from app.schema.user_schema import StaffUserCreate, StaffUserResponse, PatientUserCreate, PatientUserResponse, PatientProfileResponse, UserStatusUpdate
+from app.services.user_service import create_new_staff_user, create_new_patient_user, update_user_status, GetAllPatients, GetAllStaff, get_patient_profile
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -40,6 +41,19 @@ def get_all_patients():
         return GetAllPatients()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/patient/me", response_model=PatientProfileResponse, status_code=status.HTTP_200_OK)
+def get_my_patient_profile(token_payload: dict = Depends(get_current_user_payload)):
+    if str(token_payload.get("role", "")).lower() != "patient":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Patient access required")
+    try:
+        return get_patient_profile(int(token_payload["sub"]))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @router.get("/staff", response_model=list[StaffUserResponse], status_code=status.HTTP_200_OK)
 def get_all_staff():

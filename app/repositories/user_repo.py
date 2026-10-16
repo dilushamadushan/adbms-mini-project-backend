@@ -72,6 +72,35 @@ def get_all_patients(conn: MySQLConnection) -> list:
     finally:
         cursor.close()
 
+
+def get_patient_profile_by_user_id(conn: MySQLConnection, user_id: int) -> dict | None:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT
+                p.patient_id,
+                u.user_id,
+                u.username,
+                u.email,
+                p.first_name,
+                p.last_name,
+                p.dob,
+                p.blood_group,
+                p.emergency_contact,
+                p.allergies
+            FROM Patients p
+            JOIN Users u ON u.user_id = p.user_id
+            WHERE p.user_id = %s
+              AND LOWER(u.role) = 'patient'
+            """,
+            (user_id,),
+        )
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+
+
 def get_all_staff(conn: MySQLConnection) -> list:
     cursor = conn.cursor(dictionary=True)
     try:
