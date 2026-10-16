@@ -42,5 +42,19 @@ class PatientUserResponse(BaseModel):
     last_name: str
     raw_password: Optional[str] = None
 
+
+class PatientProfileResponse(BaseModel):
+    patient_id: int
+    user_id: int
+    username: str
+    email: Optional[str] = None
+    first_name: str
+    last_name: str
+    dob: Optional[date] = None
+    blood_group: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    allergies: Optional[str] = None
+
+
 class UserStatusUpdate(BaseModel):
     is_active: bool
