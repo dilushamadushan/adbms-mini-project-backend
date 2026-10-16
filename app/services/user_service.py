@@ -5,8 +5,8 @@ from typing import Optional
 from fastapi import BackgroundTasks
 from app.core.database import get_db
 from app.core.email import send_staff_welcome_email, send_patient_welcome_email
-from app.repositories.user_repo import create_staff_user, create_patient_user, update_is_active, get_user_by_username, get_all_patients, get_all_staff
-from app.schema.user_schema import StaffUserCreate, StaffUserResponse, PatientUserCreate, PatientUserResponse
+from app.repositories.user_repo import create_staff_user, create_patient_user, update_is_active, get_user_by_username, get_all_patients, get_all_staff, get_patient_profile_by_user_id
+from app.schema.user_schema import StaffUserCreate, StaffUserResponse, PatientUserCreate, PatientUserResponse, PatientProfileResponse
 
 def generate_username(first_name: str, last_name: str) -> str:
     num = random.randint(100, 999)
@@ -137,6 +137,15 @@ def update_user_status(user_id: int, is_active: bool) -> bool:
 def GetAllPatients() -> list:
     with get_db() as conn:
         return get_all_patients(conn)
+
+
+def get_patient_profile(user_id: int) -> PatientProfileResponse:
+    with get_db() as conn:
+        profile = get_patient_profile_by_user_id(conn, user_id)
+        if not profile:
+            raise ValueError("Patient profile not found")
+        return PatientProfileResponse(**profile)
+
 
 def GetAllStaff() -> list:
     with get_db() as conn:
