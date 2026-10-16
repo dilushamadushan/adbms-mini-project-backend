@@ -51,3 +51,25 @@ def get_appointment_history_by_doctor(conn: MySQLConnection, doctor_id: int) -> 
         return results
     finally:
         cursor.close()
+
+
+# get upcoming appointments of a doctor
+def get_upcoming_appointments_by_doctor(conn: MySQLConnection, doctor_id: int) -> list:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("sp_get_upcoming_appointments_by_doctor", (doctor_id,))
+        results = []
+        for result in cursor.stored_results():
+            for row in result.fetchall():
+                if "time_slot" in row and row["time_slot"] is not None:
+                    row["time_slot"] = str(row["time_slot"])
+                if "apt_date" in row and row["apt_date"] is not None:
+                    row["apt_date"] = str(row["apt_date"])
+                if "patient_name" in row and isinstance(row["patient_name"], (bytes, bytearray)):
+                    row["patient_name"] = row["patient_name"].decode("utf-8", errors="replace")
+                if "reason" in row and isinstance(row["reason"], (bytes, bytearray)):
+                    row["reason"] = row["reason"].decode("utf-8", errors="replace")
+                results.append(row)
+        return results
+    finally:
+        cursor.close()
