@@ -11,10 +11,8 @@ CREATE PROCEDURE CheckDoctorExists(
 )
 BEGIN
     SELECT COUNT(*) AS doctor_count
-    FROM users 
-    WHERE user_id = p_doctor_id 
-      AND role = 'doctor'
-      AND is_active = 1; -- Optional: Ensures you only count active doctors
+    FROM staff
+    WHERE staff_id = p_doctor_id;
 END //
 
 DELIMITER ;
@@ -148,10 +146,20 @@ END //
 
 DELIMITER ;
 
--- =========================================================
--- 4. GET AVAILABLE SLOTS BY DOCTOR, DEPARTMENT & DATE
--- =========================================================
 
+
+-----------------------patient------------------------------------------
+
+
+
+
+
+
+
+-- =========================================================
+-- 4. GET AVAILABLE SLOTS BY DOCTOR NAME, DEPARTMENT & DATE
+--    : slot must be at least 2 hours from now
+-- =========================================================
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_get_available_slots //
@@ -162,15 +170,14 @@ CREATE PROCEDURE sp_get_available_slots(
     IN p_apt_date    DATE
 )
 BEGIN
-    DECLARE v_doctor_id INT DEFAULT NULL;
-    DECLARE v_dept_id   INT DEFAULT NULL;
+    DECLARE v_doctor_id  INT DEFAULT NULL;
+    DECLARE v_dept_id    INT DEFAULT NULL;
     DECLARE v_clean_name VARCHAR(150);
 
-    -- 1. Date validation: must be at least 2 days ahead of current date
-    -- (Cannot book past dates, today, or tomorrow)
-    IF p_apt_date < DATE_ADD(CURDATE(), INTERVAL 2 DAY) THEN
+    -- 1. Date validation: cannot be a past date
+    IF p_apt_date < CURDATE() THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Appointment date must be at least 2 days after the current date.';
+        SET MESSAGE_TEXT = 'Appointment date cannot be in the past.';
     END IF;
 
     -- Clean prefix 'Dr.' or 'Dr ' if provided
@@ -206,7 +213,7 @@ BEGIN
         SET MESSAGE_TEXT = 'Doctor not found with the specified name and department.';
     END IF;
 
-    -- 4. Return available clinic slots where NO scheduled appointment overlaps (15 min window)
+    -- 4. Return slots that are 2+ hours from now AND have no overlapping 'Scheduled' appointment
     WITH ClinicSlots AS (
         SELECT TIME('09:00:00') AS slot_time UNION ALL
         SELECT TIME('09:30:00') UNION ALL
@@ -226,7 +233,8 @@ BEGIN
     SELECT 
         TIME_FORMAT(s.slot_time, '%h:%i %p') AS available_slot
     FROM ClinicSlots s
-    WHERE NOT EXISTS (
+    WHERE TIMESTAMP(p_apt_date, s.slot_time) >= DATE_ADD(NOW(), INTERVAL 2 HOUR)
+      AND NOT EXISTS (
         SELECT 1 
         FROM Appointments a
         WHERE a.doctor_id = v_doctor_id
@@ -247,6 +255,7 @@ DELIMITER ;
 
 -- =========================================================
 -- 5. BOOK APPOINTMENT BY PATIENT (ALWAYS STATUS 'Scheduled')
+--     must be booked at least 2 hours in advance
 -- =========================================================
 DELIMITER //
 
@@ -262,10 +271,10 @@ CREATE PROCEDURE sp_book_appointment(
 BEGIN
     DECLARE v_actual_patient_id INT DEFAULT NULL;
 
-    -- 1. Date validation: must be at least 2 days ahead of current date
-    IF p_apt_date < DATE_ADD(CURDATE(), INTERVAL 2 DAY) THEN
+    -- 1. Time validation: must be at least 2 hours from now
+    IF TIMESTAMP(p_apt_date, p_time_slot) < DATE_ADD(NOW(), INTERVAL 2 HOUR) THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Appointment date must be at least 2 days after the current date.';
+        SET MESSAGE_TEXT = 'Appointment must be booked at least 2 hours in advance.';
     END IF;
 
     -- 2. Validate patient: checks patient_id OR user_id
@@ -339,4 +348,3 @@ BEGIN
 END //
 
 DELIMITER ;
-

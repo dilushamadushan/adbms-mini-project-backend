@@ -56,4 +56,4 @@ class DoctorUpcomingAppointmentResponse(BaseModel):
             return v.decode('utf-8', errors='replace')
         return str(v)
 
-
+

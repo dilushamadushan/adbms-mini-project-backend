@@ -5,14 +5,22 @@ from app.repositories.Patient import patient_repo
 
 def _to_24h_time(time_str: str) -> str:
     time_str = str(time_str).strip()
-    if "AM" in time_str.upper() or "PM" in time_str.upper():
+    if not time_str:
+        return time_str
+    upper_time = time_str.upper()
+    if "AM" in upper_time or "PM" in upper_time:
+        for fmt in ("%I:%M %p", "%I:%M:%S %p", "%I:%M%p", "%I:%M:%S%p"):
+            try:
+                return datetime.strptime(upper_time, fmt).strftime("%H:%M:%S")
+            except ValueError:
+                pass
+    for fmt in ("%H:%M:%S", "%H:%M"):
         try:
-            return datetime.strptime(time_str, "%I:%M %p").strftime("%H:%M:00")
+            return datetime.strptime(time_str, fmt).strftime("%H:%M:%S")
         except ValueError:
             pass
-    if len(time_str) == 5:
-        return f"{time_str}:00"
     return time_str
+
 
 def get_doctor_departments():
     with get_db() as conn:

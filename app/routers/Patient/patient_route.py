@@ -28,7 +28,7 @@ def get_doctor_departments():
 def get_available_slots(
     doctor_name: str = Query(..., description="Doctor name (e.g., 'John Smith' or 'Dr. John Smith')"),
     department_name: str = Query(..., description="Department name (e.g., 'Cardiology')"),
-    apt_date: str = Query(..., description="Appointment date in YYYY-MM-DD format (must be >= CURDATE() + 2)")
+    apt_date: str = Query(..., description="Appointment date in YYYY-MM-DD format")
 ):
     try:
         return patient_service.get_available_slots(
@@ -40,9 +40,13 @@ def get_available_slots(
         logger.warning("Database validation error for available slots: %s", err)
         error_msg = err.msg if hasattr(err, "msg") and err.msg else str(err)
         raise HTTPException(status_code=400, detail=error_msg)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to get available slots: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = getattr(e, "msg", str(e))
+        is_val_err = any(k in error_msg for k in ("Appointment", "Doctor", "Department", "Patient"))
+        raise HTTPException(status_code=400 if is_val_err else 500, detail=error_msg)
 
 
 @router.post("/book-appointment", response_model=BookAppointmentResponse, status_code=status.HTTP_201_CREATED)
@@ -80,5 +84,8 @@ def book_appointment(
         raise
     except Exception as e:
         logger.exception("Failed to book appointment: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = getattr(e, "msg", str(e))
+        is_val_err = any(k in error_msg for k in ("Appointment", "Doctor", "Department", "Patient"))
+        raise HTTPException(status_code=400 if is_val_err else 500, detail=error_msg)
+
 
