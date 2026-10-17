@@ -34,6 +34,28 @@ def get_appointment_count(doctor_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/appointment-count-completed/{doctor_id}", response_model=int)
+def get_completed_appointment_count(doctor_id: int):
+    try:
+        return docter_service.get_completed_appointment_count(doctor_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to load completed doctor appointment count: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/patients-count/{doctor_id}", response_model=int)
+def get_total_patients_count(doctor_id: int):
+    try:
+        return docter_service.get_total_patients_count(doctor_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to load doctor patients count: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/appointment-history/{doctor_id}", response_model=List[DoctorAppointmentResponse])
 def get_appointment_history_by_doctor(doctor_id: int):
     try:
