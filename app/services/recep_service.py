@@ -288,8 +288,17 @@ def change_appointment_status(
 
 
 def get_appointments(
-    user_id: int, role: str, patient_id: int | None, appointment_date: date | None,
+    user_id: int,
+    role: str,
+    patient_id: int | None,
+    appointment_date: date | None,
+    patient_name: str | None = None,
 ) -> list[dict[str, Any]]:
     _require_receptionist(role)
     with get_db() as conn:
-        return recep_repo.list_appointments(conn, patient_id=patient_id, appointment_date=appointment_date)
+        return recep_repo.list_appointments(
+            conn,
+            patient_id=patient_id,
+            appointment_date=appointment_date,
+            patient_name=patient_name,
+        )

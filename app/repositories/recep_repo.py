@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Optional
@@ -36,41 +37,25 @@ _ADMISSION_SELECT = """
     LEFT JOIN Bills bi ON bi.admission_id = a.admission_id
 """
 
-_APPOINTMENT_SELECT = """
-    SELECT a.apt_id, a.patient_id,
-           CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
-           a.doctor_id, CONCAT('Dr. ', s.first_name, ' ', s.last_name) AS doctor_name,
-           a.dept_id, d.dept_name, a.apt_date,
-           TIME_FORMAT(a.time_slot, '%H:%i') AS time_slot, a.status
-    FROM Appointments a
-    JOIN Patients p ON p.patient_id = a.patient_id
-    JOIN Staff s ON s.staff_id = a.doctor_id
-    JOIN Departments d ON d.dept_id = a.dept_id
-"""
-
-
 def get_patient_records(conn: MySQLConnection, search: Optional[str] = None) -> list[dict[str, Any]]:
     cursor = conn.cursor(dictionary=True)
     try:
-        query = """
-            SELECT p.patient_id, p.user_id, u.username, u.email,
-                   p.first_name, p.last_name, p.dob, p.blood_group,
-                   p.emergency_contact, p.allergies
-            FROM Patients p JOIN Users u ON u.user_id = p.user_id
-            WHERE LOWER(u.role) = 'patient'
-        """
-        values: tuple[Any, ...] = ()
         if search and search.strip():
-            query += """
-                AND (p.first_name LIKE %s OR p.last_name LIKE %s OR
-                     u.email LIKE %s OR u.username LIKE %s OR
-                     CAST(p.patient_id AS CHAR) LIKE %s)
-            """
-            term = f"%{search.strip()}%"
-            values = (term, term, term, term, term)
-        query += " ORDER BY p.last_name, p.first_name"
-        cursor.execute(query, values)
-        return cursor.fetchall()
+            cursor.callproc("sp_recep_search_patients_by_name", (search.strip(),))
+            records: list[dict[str, Any]] = []
+            for result in cursor.stored_results():
+                records.extend(result.fetchall())
+        else:
+            cursor.execute("SELECT fn_recep_get_all_patients() AS patient_records")
+            row = cursor.fetchone()
+            patient_records = row["patient_records"]
+            records = (
+                json.loads(patient_records)
+                if isinstance(patient_records, (str, bytes, bytearray))
+                else patient_records
+            )
+            records.sort(key=lambda patient: (patient["last_name"], patient["first_name"]))
+        return records
     finally:
         cursor.close()
 
@@ -126,26 +111,23 @@ def list_appointments(
     appointment_id: Optional[int] = None,
     patient_id: Optional[int] = None,
     appointment_date: Optional[date] = None,
+    patient_name: Optional[str] = None,
 ) -> list[dict[str, Any]]:
-    filters = []
-    values: list[Any] = []
-    if appointment_id is not None:
-        filters.append("a.apt_id = %s")
-        values.append(appointment_id)
-    if patient_id is not None:
-        filters.append("a.patient_id = %s")
-        values.append(patient_id)
-    if appointment_date is not None:
-        filters.append("a.apt_date = %s")
-        values.append(appointment_date)
-    query = _APPOINTMENT_SELECT
-    if filters:
-        query += " WHERE " + " AND ".join(filters)
-    query += " ORDER BY a.apt_date, a.time_slot"
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute(query, tuple(values))
-        return cursor.fetchall()
+        cursor.callproc(
+            "sp_recep_get_appointments",
+            (
+                appointment_id,
+                patient_id,
+                appointment_date,
+                patient_name.strip() if patient_name and patient_name.strip() else None,
+            ),
+        )
+        appointments: list[dict[str, Any]] = []
+        for result in cursor.stored_results():
+            appointments.extend(result.fetchall())
+        return appointments
     finally:
         cursor.close()
 

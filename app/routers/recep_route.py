@@ -184,10 +184,11 @@ def get_patient_records(
 def get_appointments(
     patient_id: int | None = None,
     appointment_date: date | None = Query(default=None, alias="date"),
+    patient_name: str | None = None,
     payload: dict = Depends(get_current_user_payload),
 ):
     user_id, role = _identity(payload)
-    return recep_service.get_appointments(user_id, role, patient_id, appointment_date)
+    return recep_service.get_appointments(user_id, role, patient_id, appointment_date, patient_name)
 
 
 @router.post("/appointments", response_model=RecepAppointmentResponse, status_code=status.HTTP_201_CREATED)
