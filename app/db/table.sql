@@ -181,6 +181,8 @@ CREATE TABLE IF NOT EXISTS Notifications (
     INDEX idx_notifications_user (target_user_id, is_read),
     FOREIGN KEY (target_user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
+<<<<<<< HEAD
+=======
 
 CREATE TABLE IF NOT EXISTS Admissions (
     admission_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -271,3 +273,4 @@ CREATE TABLE IF NOT EXISTS Dispensations (
     INDEX idx_disp_pharmacist (pharmacist_id, dispensed_at),
     INDEX idx_disp_medicine   (medicine_id, dispensed_at)
 );
+>>>>>>> 4b81bc23de82aeaad38d89736d7ba32adb4aab3b

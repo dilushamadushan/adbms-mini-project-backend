@@ -20,5 +20,3 @@ ON Staff (dept_id);
 
 CREATE INDEX idx_audit_actor_action 
 ON Audit_Logs (actor_id, action_type);
-
-

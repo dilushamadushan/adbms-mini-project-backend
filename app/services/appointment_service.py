@@ -52,7 +52,7 @@ def list_booked_slots(
                 or appointments[0]["doctor_id"] != doctor_id
             ):
                 raise HTTPException(status_code=404, detail="Appointment not found")
-        return appointment_repo.list_booked_slots(conn, doctor_id, apt_date, exclude_apt_id)
+        return appointment_repo.list_booked_slots(conn, doctor_id, apt_date)
 
 
 def reschedule_appointment(
