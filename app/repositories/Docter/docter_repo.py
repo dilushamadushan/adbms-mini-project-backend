@@ -101,3 +101,113 @@ def get_upcoming_appointments_by_doctor(conn: MySQLConnection, doctor_id: int) -
         return results
     finally:
         cursor.close()
+
+
+# check the given user id belongs to a doctor/staff
+def doctor_user_exists(conn: MySQLConnection, user_id: int) -> bool:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT COUNT(*) AS doctor_count FROM staff WHERE user_id = %s", (user_id,))
+        row = cursor.fetchone()
+        return row is not None and row["doctor_count"] > 0
+    finally:
+        cursor.close()
+
+# get appointments for a doctor by user_id grouped by Today, Upcoming, Past
+def get_doctor_appointments_by_user(conn: MySQLConnection, user_id: int) -> list:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("sp_doctor_appointments", (user_id,))
+        results = []
+        for result in cursor.stored_results():
+            for row in result.fetchall():
+                for key, value in row.items():
+                    if isinstance(value, (bytes, bytearray)):
+                        row[key] = value.decode("utf-8", errors="replace")
+                    elif key in ("apt_date", "appointment_time") and value is not None:
+                        row[key] = str(value)
+                results.append(row)
+        return results
+    finally:
+        cursor.close()
+
+
+def get_patient_details(conn: MySQLConnection, patient_id: int) -> dict | None:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("GetPatientDetails", (patient_id,))
+        for result in cursor.stored_results():
+            return result.fetchone()
+        return None
+    finally:
+        cursor.close()
+
+
+def get_patient_appointment_details(
+    conn: MySQLConnection, appointment_id: int
+) -> dict | None:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("get_patient_appointment_details", (appointment_id,))
+        for result in cursor.stored_results():
+            return result.fetchone()
+        return None
+    finally:
+        cursor.close()
+
+
+def get_ward_names(conn: MySQLConnection) -> list[dict]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT ward_id, ward_name FROM wards ORDER BY ward_name")
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+
+
+def create_admission_request(
+    conn: MySQLConnection,
+    patient_id: int,
+    gender: str,
+    ward_id: int,
+    reason: str,
+    doctor_id: int,
+    user_id: int,
+) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc(
+            "sp_create_admission_request",
+            (patient_id, gender, ward_id, reason, doctor_id, user_id),
+        )
+        for result in cursor.stored_results():
+            row = result.fetchone()
+            if row and row.get("admission_id") is not None:
+                conn.commit()
+                return int(row["admission_id"])
+        raise ValueError("Admission procedure did not return an admission ID")
+    finally:
+        cursor.close()
+
+
+def get_active_admission_by_patient(
+    conn: MySQLConnection, patient_id: int
+) -> dict | None:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT admission_id, patient_id, ward_id, bed_id, admitted_doctor_id,
+                   admitted_by, admitted_at, admission_reason, guardian_name,
+                   guardian_relationship, guardian_contact, gender, status
+            FROM vw_admissions_data
+            WHERE patient_id = %s
+              AND status IN ('Pending', 'Admitted')
+            ORDER BY admitted_at DESC
+            LIMIT 1
+            """,
+            (patient_id,),
+        )
+        return cursor.fetchone()
+    finally:
+        cursor.close()

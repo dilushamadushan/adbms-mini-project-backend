@@ -36,7 +36,6 @@ DELIMITER //
 -- 1. GET TODAY'S APPOINTMENTS FOR A DOCTOR
 -- =========================================================
 
-DROP PROCEDURE IF EXISTS GetAppointmentsByDoctor //
 
 CREATE PROCEDURE GetAppointmentsByDoctor(
     IN p_doctor_id INT
@@ -71,7 +70,6 @@ END //
 -- 2. GET APPOINTMENT HISTORY FOR A DOCTOR
 -- =========================================================
 
-DROP PROCEDURE IF EXISTS GetAppointmentHistoryByDoctor //
 
 CREATE PROCEDURE GetAppointmentHistoryByDoctor(
     IN p_doctor_id INT
@@ -147,8 +145,170 @@ END //
 DELIMITER ;
 
 
+-- =========================================================
+-- 3b. GET APPOINTMENTS GROUPED (TODAY, UPCOMING, PAST) BY DOCTOR USER ID
+-- =========================================================
+
+DELIMITER //
+
+
+CREATE PROCEDURE sp_doctor_appointments(IN p_user_id INT)
+BEGIN
+    SELECT a.apt_id,
+           p.patient_id,
+           CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+           a.apt_date,
+           TIME_FORMAT(a.time_slot, '%h:%i %p')   AS appointment_time,
+           a.status,
+           CASE
+               WHEN a.apt_date = CURDATE() THEN 'Today'
+               WHEN a.apt_date > CURDATE() THEN 'Upcoming'
+               ELSE 'Past'
+           END AS day_group
+    FROM appointments a
+    JOIN patients p ON p.patient_id = a.patient_id
+    JOIN staff s    ON s.staff_id   = a.doctor_id
+    WHERE s.user_id = p_user_id
+    ORDER BY
+        CASE WHEN a.apt_date = CURDATE() THEN 0
+             WHEN a.apt_date > CURDATE() THEN 1
+             ELSE 2 END,                                   -- Today, Upcoming, Past
+        CASE WHEN a.apt_date >= CURDATE() THEN a.apt_date END ASC,   -- future: nearest first
+        CASE WHEN a.apt_date <  CURDATE() THEN a.apt_date END DESC,  -- past: latest first
+        a.time_slot ASC;
+END //
+
+DELIMITER ;
+
+
+
+-- get full details of one patient
+
+	DELIMITER //
+
+	CREATE PROCEDURE GetPatientDetails(
+		IN p_patient_id INT
+	)
+	BEGIN
+		SELECT p.patient_id,
+			   CONCAT(p.first_name, ' ', p.last_name)            AS patient_name,
+			   (SELECT ad.gender
+				  FROM admissions ad
+				 WHERE ad.patient_id = p.patient_id
+				 ORDER BY ad.admitted_at DESC
+				 LIMIT 1)                                        AS gender,
+			   TIMESTAMPDIFF(YEAR, p.dob, CURDATE())             AS age,
+			   DATE_FORMAT(p.dob, '%d %b %Y')                    AS dob,
+			   p.emergency_contact                               AS phone,
+			   p.blood_group,
+			   COALESCE(NULLIF(p.allergies, ''), 'None recorded') AS allergies
+		FROM patients p
+		WHERE p.patient_id = p_patient_id;
+	END //
+
+	DELIMITER ;
+
+	
+
+    -- get appointment overview (date, time, reason)
+
+DELIMITER //
+
+CREATE PROCEDURE get_patient_appointment_details(
+    IN p_apt_id INT
+)
+BEGIN
+    SELECT DATE_FORMAT(a.apt_date, '%a, %d %b %Y') AS apt_date,
+           TIME_FORMAT(a.time_slot, '%h:%i %p')    AS apt_time,
+           d.dept_name                             AS reason
+    FROM appointments a
+    JOIN departments d ON d.dept_id = a.dept_id
+    WHERE a.apt_id = p_apt_id;
+END //
+
+DELIMITER ;
+
+
+
+DELIMITER //
+
+CREATE PROCEDURE sp_create_admission_request(
+    IN p_patient_id INT,
+    IN p_gender     VARCHAR(10),
+    IN p_ward_id    INT,
+    IN p_reason     TEXT,
+    IN p_doctor_id  INT,    -- attending doctor's staff_id
+    IN p_user_id    INT     -- logged-in user sending the request
+)
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM patients WHERE patient_id = p_patient_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Patient not found';
+    END IF;
+
+    -- NEW: patient already has a waiting request
+    IF EXISTS (SELECT 1
+                 FROM admissions
+                WHERE patient_id = p_patient_id
+                  AND status = 'Pending') THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Patient already has a pending admission request';
+    END IF;
+
+    -- NEW: patient is currently admitted (admitted and not yet discharged)
+    IF EXISTS (SELECT 1
+                 FROM admissions a
+                 LEFT JOIN discharges d
+                        ON d.admission_id = a.admission_id
+                       AND d.status = 'Discharged'
+                WHERE a.patient_id = p_patient_id
+                  AND a.status = 'Admitted'
+                  AND d.discharge_id IS NULL) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Patient is already admitted';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM wards WHERE ward_id = p_ward_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Ward not found';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1
+                     FROM staff s
+                     JOIN users u ON u.user_id = s.user_id
+                    WHERE s.staff_id = p_doctor_id
+                      AND u.role = 'doctor') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Doctor not found';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM users WHERE user_id = p_user_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'User not found';
+    END IF;
+
+    IF p_gender NOT IN ('Female', 'Male') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gender must be Female or Male';
+    END IF;
+
+    IF p_reason IS NULL OR TRIM(p_reason) = '' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Reason for admission is required';
+    END IF;
+
+    INSERT INTO admissions
+        (patient_id, ward_id, admitted_doctor_id, admitted_by,
+         admission_reason, gender, guardian_name, guardian_contact)
+    VALUES
+        (p_patient_id, p_ward_id, p_doctor_id, p_user_id,
+         TRIM(p_reason), p_gender, '', '');
+
+    SELECT LAST_INSERT_ID() AS admission_id;
+END //
+
+DELIMITER ;
+
+
+
+
 
 -----------------------patient------------------------------------------
+
 
 
 
@@ -162,7 +322,6 @@ DELIMITER ;
 -- =========================================================
 DELIMITER //
 
-DROP PROCEDURE IF EXISTS sp_get_available_slots //
 
 CREATE PROCEDURE sp_get_available_slots(
     IN p_doctor_name VARCHAR(150),
@@ -259,7 +418,6 @@ DELIMITER ;
 -- =========================================================
 DELIMITER //
 
-DROP PROCEDURE IF EXISTS sp_book_appointment //
 
 CREATE PROCEDURE sp_book_appointment(
     IN p_patient_id INT,
