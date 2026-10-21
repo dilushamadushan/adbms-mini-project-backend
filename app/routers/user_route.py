@@ -25,6 +25,7 @@ def add_patient_member(payload: PatientUserCreate, background_tasks: BackgroundT
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.patch("/{user_id}/status", status_code=status.HTTP_200_OK)
 def change_user_status(user_id: int, payload: UserStatusUpdate):
     try:
