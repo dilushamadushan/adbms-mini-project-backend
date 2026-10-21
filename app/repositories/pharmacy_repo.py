@@ -302,7 +302,24 @@ def get_purchase_orders(conn: MySQLConnection) -> List[Dict[str, Any]]:
                      po.pharmacist_id, s.first_name, s.last_name
             ORDER BY po.order_date DESC
         """)
-        return cursor.fetchall()
+        orders = cursor.fetchall()
+        for order in orders:
+            cursor.execute("""
+                SELECT 
+                    poi.item_id,
+                    poi.medicine_id,
+                    m.med_name,
+                    m.generic_name,
+                    poi.requested_quantity,
+                    poi.unit_price,
+                    poi.subtotal
+                FROM Purchase_Order_Items poi
+                JOIN Medicines m ON poi.medicine_id = m.medicine_id
+                WHERE poi.order_id = %s
+                ORDER BY poi.item_id ASC
+            """, (order["order_id"],))
+            order["items"] = cursor.fetchall()
+        return orders
     finally:
         cursor.close()
 
