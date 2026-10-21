@@ -1,13 +1,17 @@
 
 
 -- get today only scheduled appointments count
+
 DELIMITER //
 
-CREATE FUNCTION IF NOT EXISTS Get_Total_Appointment_Count_According_To_Doctor(
-    doc_id VARCHAR(10)
+DROP FUNCTION IF EXISTS Get_Total_Appointment_Count_According_To_Doctor //
+
+CREATE FUNCTION Get_Total_Appointment_Count_According_To_Doctor(
+    doc_id INT
 )
 RETURNS INT
-DETERMINISTIC
+NOT DETERMINISTIC
+READS SQL DATA
 BEGIN
     DECLARE total INT;
 
@@ -18,11 +22,11 @@ BEGIN
       AND DATE(apt_date) = CURDATE()
       AND status = 'Scheduled';
 
-    RETURN total;
+    RETURN COALESCE(total, 0);
 END //
 
-
 DELIMITER ;
+
 
 
 -- get total completed appointments count current date
@@ -44,18 +48,19 @@ BEGIN
 
     RETURN total;
 END //
-Get_Total_Appointment_Count_According_To_Doctor_complted
-
 
 DELIMITER ;
+
 
 
 -- get total patients count by doctor only status scheduled and cancelled
 
 DELIMITER //
 
+DROP FUNCTION IF EXISTS get_Total_Patients_count_by_docter //
+
 CREATE FUNCTION get_Total_Patients_count_by_docter(
-    doc_id VARCHAR(10)
+    doc_id INT
 )
 RETURNS INT
 NOT DETERMINISTIC
