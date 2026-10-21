@@ -300,6 +300,37 @@ def get_patient_id(conn: MySQLConnection, patient_id: int) -> Optional[int]:
         cursor.close()
 
 
+def lock_patient_for_admission(conn: MySQLConnection, patient_id: int) -> bool:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT patient_id FROM Patients WHERE patient_id = %s FOR UPDATE",
+            (patient_id,),
+        )
+        return cursor.fetchone() is not None
+    finally:
+        cursor.close()
+
+
+def has_open_admission(conn: MySQLConnection, patient_id: int) -> bool:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM Admissions a
+            LEFT JOIN Discharges d ON d.admission_id = a.admission_id
+            WHERE a.patient_id = %s
+              AND (d.admission_id IS NULL OR d.status <> 'Discharged')
+            LIMIT 1
+            """,
+            (patient_id,),
+        )
+        return cursor.fetchone() is not None
+    finally:
+        cursor.close()
+
+
 def is_active_doctor(conn: MySQLConnection, doctor_id: int) -> bool:
     cursor = conn.cursor()
     try:
@@ -548,6 +579,52 @@ def complete_discharge(conn: MySQLConnection, admission_id: int, user_id: int) -
             (admission["bed_id"], admission["patient_id"]),
         )
         return cursor.rowcount
+    finally:
+        cursor.close()
+
+
+def discharge_authorized_admission(
+    conn: MySQLConnection, admission_id: int, user_id: int
+) -> bool:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT a.bed_id, a.patient_id
+            FROM Admissions a
+            JOIN Discharges dis ON dis.admission_id = a.admission_id
+            WHERE a.admission_id = %s
+              AND a.status = 'Admitted'
+              AND dis.status = 'Authorized'
+            FOR UPDATE
+            """,
+            (admission_id,),
+        )
+        admission = cursor.fetchone()
+        if not admission:
+            return False
+
+        cursor.execute(
+            """
+            UPDATE Discharges
+            SET status = 'Discharged', discharged_by = %s, discharged_at = NOW()
+            WHERE admission_id = %s AND status = 'Authorized'
+            """,
+            (user_id, admission_id),
+        )
+        if cursor.rowcount != 1:
+            return False
+
+        if admission["bed_id"] is not None:
+            cursor.execute(
+                """
+                UPDATE Beds
+                SET status = 'Cleaning', current_patient_id = NULL
+                WHERE bed_id = %s AND current_patient_id = %s
+                """,
+                (admission["bed_id"], admission["patient_id"]),
+            )
+        return True
     finally:
         cursor.close()
 

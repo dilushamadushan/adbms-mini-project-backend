@@ -111,6 +111,24 @@ def authorize_discharge(
 
 
 @router.post(
+    "/admissions/{admission_id}/discharge",
+    response_model=AdmissionActionResponse,
+)
+def discharge_authorized_patient(
+    admission_id: int,
+    payload: dict = Depends(get_current_user_payload),
+):
+    user_id, role = _identity(payload)
+    admission = recep_service.discharge_authorized_patient(
+        user_id, role, admission_id
+    )
+    return {
+        "message": f"{admission['patient_name']} discharged successfully.",
+        "admission": admission,
+    }
+
+
+@router.post(
     "/admissions/{admission_id}/discharge-bill",
     response_model=AdmissionActionResponse,
 )

@@ -57,24 +57,37 @@ def admit_patient(
     if gender not in {"Female", "Male"}:
         raise HTTPException(status_code=400, detail="Select Female or Male")
     with get_db() as conn:
-        if not recep_repo.get_patient_id(conn, patient_id):
+        if not recep_repo.lock_patient_for_admission(conn, patient_id):
             raise HTTPException(status_code=404, detail="Patient not found")
+        if recep_repo.has_open_admission(conn, patient_id):
+            raise HTTPException(
+                status_code=409,
+                detail="Patient already has an open admission. Complete discharge before admitting again.",
+            )
         if not any(ward["ward_id"] == ward_id for ward in recep_repo.list_wards(conn)):
             raise HTTPException(status_code=404, detail="Ward not found")
         if not recep_repo.is_active_doctor(conn, admitted_doctor_id):
             raise HTTPException(status_code=404, detail="Active admitting doctor not found")
-        admission_id = recep_repo.create_admission(
-            conn,
-            patient_id,
-            ward_id,
-            admitted_doctor_id,
-            user_id,
-            reason.strip(),
-            guardian_name.strip(),
-            guardian_relationship.strip(),
-            guardian_contact.strip(),
-            gender,
-        )
+        try:
+            admission_id = recep_repo.create_admission(
+                conn,
+                patient_id,
+                ward_id,
+                admitted_doctor_id,
+                user_id,
+                reason.strip(),
+                guardian_name.strip(),
+                guardian_relationship.strip(),
+                guardian_contact.strip(),
+                gender,
+            )
+        except mysql.connector.Error as exc:
+            if exc.sqlstate == "45000":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Patient already has an open admission. Complete discharge before admitting again.",
+                ) from exc
+            raise
         return recep_repo.get_admission(conn, admission_id)
 
 
@@ -84,7 +97,16 @@ def assign_admission_bed(
     if role != "nurse":
         raise HTTPException(status_code=403, detail="Only a nurse can assign an admission bed")
     with get_db() as conn:
-        if not recep_repo.assign_admission_bed(conn, admission_id, bed_id):
+        try:
+            assigned = recep_repo.assign_admission_bed(conn, admission_id, bed_id)
+        except mysql.connector.Error as exc:
+            if exc.sqlstate == "45000":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Patient already has an open admission. Complete discharge before admitting again.",
+                ) from exc
+            raise
+        if not assigned:
             raise HTTPException(
                 status_code=409,
                 detail="The admission or bed is no longer available for assignment in the selected ward",
@@ -186,6 +208,22 @@ def pay_discharge_balance(
         if fully_paid:
             recep_repo.complete_discharge(conn, admission_id, user_id)
         return recep_repo.get_admission(conn, admission_id)
+
+
+def discharge_authorized_patient(
+    user_id: int, role: str, admission_id: int
+) -> dict[str, Any]:
+    _require_receptionist(role)
+    with get_db() as conn:
+        if not recep_repo.discharge_authorized_admission(conn, admission_id, user_id):
+            raise HTTPException(
+                status_code=409,
+                detail="This admission is not authorized for discharge or its bed could not be released.",
+            )
+        admission = recep_repo.get_admission(conn, admission_id)
+        if not admission:
+            raise HTTPException(status_code=404, detail="Admission not found after discharge")
+        return admission
 
 
 def _require_receptionist(role: str) -> None:
