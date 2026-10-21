@@ -25,16 +25,15 @@ _ADMISSION_SELECT = """
            END AS status,
            dis.discharge_authorized_by,
            dis.discharge_authorized_at, dis.discharge_notes,
-           bi.bill_id, bi.room_charges, bi.treatment_charges,
-           bi.other_charges, bi.total_amount, bi.amount_paid,
-           bi.payment_method, bi.payment_status
+           NULL AS bill_id, NULL AS room_charges, NULL AS treatment_charges,
+           NULL AS other_charges, NULL AS total_amount, NULL AS amount_paid,
+           NULL AS payment_method, NULL AS payment_status
     FROM Admissions a
     JOIN Patients p ON p.patient_id = a.patient_id
     JOIN Wards w ON w.ward_id = a.ward_id
     LEFT JOIN Beds b ON b.bed_id = a.bed_id
     JOIN Staff ds ON ds.staff_id = a.admitted_doctor_id
     LEFT JOIN Discharges dis ON dis.admission_id = a.admission_id
-    LEFT JOIN Bills bi ON bi.admission_id = a.admission_id
 """
 
 def get_patient_records(conn: MySQLConnection, search: Optional[str] = None) -> list[dict[str, Any]]:
