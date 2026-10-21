@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS Users (
     username      VARCHAR(100) NOT NULL UNIQUE,
     email         VARCHAR(255) NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role          ENUM('doctor', 'nurse', 'receptionist', 'patient', 'admin') DEFAULT 'patient',
+    role          ENUM('doctor', 'nurse', 'receptionist', 'patient', 'admin', 'pharmacist') DEFAULT 'patient',
     is_active     BOOLEAN DEFAULT TRUE,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -181,3 +181,96 @@ CREATE TABLE IF NOT EXISTS Notifications (
     INDEX idx_notifications_user (target_user_id, is_read),
     FOREIGN KEY (target_user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
+<<<<<<< HEAD
+=======
+
+CREATE TABLE IF NOT EXISTS Admissions (
+    admission_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    ward_id INT NOT NULL,
+    bed_id INT ,
+    admitted_doctor_id INT NOT NULL,
+    admitted_by INT NOT NULL,
+    admitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    admission_reason TEXT NOT NULL,
+    guardian_name VARCHAR(200) NOT NULL,
+    guardian_relationship VARCHAR(100) NOT NULL DEFAULT 'Guardian',
+    guardian_contact VARCHAR(20) NOT NULL,
+    gender ENUM('Female', 'Male') NOT NULL,
+    status ENUM('Admitted', 'Pending') NOT NULL DEFAULT 'Pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id),
+    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id),
+    FOREIGN KEY (bed_id) REFERENCES Beds(bed_id),
+    FOREIGN KEY (admitted_doctor_id) REFERENCES Staff(staff_id),
+    FOREIGN KEY (admitted_by) REFERENCES Users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS Discharges (
+    discharge_id INT AUTO_INCREMENT PRIMARY KEY,
+    admission_id INT NOT NULL UNIQUE,
+    discharge_authorized_by INT NOT NULL,
+    discharge_authorized_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    discharge_notes TEXT NOT NULL,
+    status ENUM('Authorized', 'Discharged') NOT NULL DEFAULT 'Authorized',
+    discharged_by INT NULL,
+    discharged_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (admission_id) REFERENCES Admissions(admission_id),
+    FOREIGN KEY (discharge_authorized_by) REFERENCES Staff(staff_id),
+    FOREIGN KEY (discharged_by) REFERENCES Users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS Medicines (
+    medicine_id    INT AUTO_INCREMENT PRIMARY KEY,
+    med_name       VARCHAR(100) NOT NULL UNIQUE,
+    generic_name   VARCHAR(100) NULL,
+    unit_price     DECIMAL(10,2) NOT NULL,
+    stock_qty      INT NOT NULL DEFAULT 0,
+    reorder_level  INT NOT NULL DEFAULT 20,
+    expiry_date    DATE NOT NULL,
+    is_active      BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT chk_med_stock_nonneg   CHECK (stock_qty >= 0),
+    CONSTRAINT chk_med_price_positive CHECK (unit_price > 0),
+    CONSTRAINT chk_med_reorder_nonneg CHECK (reorder_level >= 0),
+    INDEX idx_med_expiry (expiry_date),
+    INDEX idx_med_stock  (stock_qty, reorder_level),
+    FULLTEXT KEY ft_med_name (med_name, generic_name)
+);
+ 
+CREATE TABLE IF NOT EXISTS Stock_Receipts (
+    receipt_id   INT AUTO_INCREMENT PRIMARY KEY,
+    medicine_id  INT NOT NULL,
+    quantity     INT NOT NULL,
+    expiry_date  DATE NOT NULL,
+    received_by  INT NOT NULL,
+    received_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_receipt_qty_positive CHECK (quantity > 0),
+    FOREIGN KEY (medicine_id) REFERENCES Medicines(medicine_id),
+    FOREIGN KEY (received_by) REFERENCES Staff(staff_id),
+    INDEX idx_receipt_medicine (medicine_id, received_at)
+);
+ 
+CREATE TABLE IF NOT EXISTS Dispensations (
+    dispense_id        INT AUTO_INCREMENT PRIMARY KEY,
+    rx_id              INT NOT NULL,
+    medicine_id        INT NOT NULL,
+    pharmacist_id      INT NOT NULL,
+    admission_id       INT NULL,
+    quantity           INT NOT NULL,
+    unit_price_at_sale DECIMAL(10,2) NOT NULL,
+    dispensed_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_disp_qty_positive CHECK (quantity > 0),
+    UNIQUE KEY uq_one_dispense_per_rx (rx_id),
+    FOREIGN KEY (rx_id)         REFERENCES Prescriptions(rx_id),
+    FOREIGN KEY (medicine_id)   REFERENCES Medicines(medicine_id),
+    FOREIGN KEY (pharmacist_id) REFERENCES Staff(staff_id),
+    FOREIGN KEY (admission_id)  REFERENCES Admissions(admission_id),
+    INDEX idx_disp_pharmacist (pharmacist_id, dispensed_at),
+    INDEX idx_disp_medicine   (medicine_id, dispensed_at)
+);
+>>>>>>> 4b81bc23de82aeaad38d89736d7ba32adb4aab3b
