@@ -137,3 +137,66 @@ class PurchaseOrderResponse(BaseModel):
     total_items: Optional[int] = 0
     items: Optional[List[PurchaseOrderItemResponse]] = []
 
+# ---------------------------------------------------------------------------
+# Prescription & Dispensing Schemas (Doctor-to-Pharmacist Workflow)
+# ---------------------------------------------------------------------------
+class MedicationPrescriptionItem(BaseModel):
+    medicine: str
+    dose: Optional[str] = "Standard"
+    route: Optional[str] = "Oral"
+    frequency: Optional[str] = "Once Daily"
+    duration: Optional[str] = "7 Days"
+    timeSlots: Optional[str] = None
+    instructions: Optional[str] = None
+
+class PrescriptionSendRequest(BaseModel):
+    medications: List[MedicationPrescriptionItem]
+
+class PrescriptionQueueItem(BaseModel):
+    rx_id: int
+    record_id: int
+    med_name: str
+    dosage: str
+    duration: Optional[str] = None
+    prescribed_at: Optional[datetime] = None
+    patient_id: int
+    patient_name: str
+    allergies: Optional[str] = None
+    doctor_name: str
+    medicine_id: Optional[int] = None
+    inventory_med_name: Optional[str] = None
+    stock_qty: Optional[int] = None
+    unit_price: Optional[Decimal] = None
+    is_dispensed: bool = False
+    dispense_id: Optional[int] = None
+
+class DispenseRequest(BaseModel):
+    medicine_id: int
+    quantity: int = Field(..., gt=0, description="Quantity of medicine units to dispense")
+    pharmacist_id: int = Field(5, description="Staff ID of the dispensing pharmacist")
+    admission_id: Optional[int] = None
+
+class DispenseResponse(BaseModel):
+    success: bool
+    message: str
+    dispense_id: int
+    rx_id: int
+    medicine_id: int
+    quantity: int
+    unit_price: Decimal
+    total_price: Decimal
+    remaining_stock: int
+    dispensed_at: datetime
+
+class DispensationHistoryItem(BaseModel):
+    dispense_id: int
+    rx_id: int
+    patient_name: str
+    doctor_name: str
+    med_name: str
+    quantity: int
+    unit_price_at_sale: Decimal
+    total_revenue: Decimal
+    dispensed_at: datetime
+    pharmacist_name: str
+

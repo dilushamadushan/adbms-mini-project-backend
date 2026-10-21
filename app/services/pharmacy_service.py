@@ -129,4 +129,39 @@ def receive_and_restock_order(order_id: int, staff_id: int, expiry_date: Optiona
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+# ---------------------------------------------------------------------------
+# Prescriptions & Dispensing Services
+# ---------------------------------------------------------------------------
+def fetch_pending_prescriptions() -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        return repo.get_prescriptions_queue(conn, status_filter="PENDING")
+
+def fetch_dispensation_history(limit: int = 50) -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        return repo.get_dispensations_history(conn, limit=limit)
+
+def dispense_prescription(rx_id: int, payload: Any) -> Dict[str, Any]:
+    with get_db() as conn:
+        try:
+            return repo.record_dispensation(
+                conn=conn,
+                rx_id=rx_id,
+                medicine_id=payload.medicine_id,
+                quantity=payload.quantity,
+                pharmacist_id=payload.pharmacist_id,
+                admission_id=payload.admission_id
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+def dispatch_doctor_prescription(appointment_id: int, payload: Any) -> Dict[str, Any]:
+    with get_db() as conn:
+        try:
+            meds_dict = [m.model_dump() for m in payload.medications]
+            return repo.save_doctor_prescription(conn, appointment_id=appointment_id, medications=meds_dict)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 

@@ -144,6 +144,7 @@ BEGIN
         END AS urgency_status
     FROM Medicines
     WHERE expiry_date <= DATE_ADD(CURDATE(), INTERVAL p_days_threshold DAY)
+      AND stock_qty > 0
       AND is_active = TRUE
     ORDER BY expiry_date ASC;
 END //
@@ -227,8 +228,8 @@ BEGIN
         (SELECT COUNT(*) FROM Medicines WHERE is_active = TRUE) AS total_medicines,
         (SELECT COALESCE(SUM(stock_qty), 0) FROM Medicines WHERE is_active = TRUE) AS total_stock_units,
         (SELECT COUNT(*) FROM Medicines WHERE stock_qty <= reorder_level AND is_active = TRUE) AS low_stock_count,
-        (SELECT COUNT(*) FROM Medicines WHERE expiry_date <= CURDATE() AND is_active = TRUE) AS expired_count,
-        (SELECT COUNT(*) FROM Medicines WHERE expiry_date > CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND is_active = TRUE) AS expiring_soon_count,
+        (SELECT COUNT(*) FROM Medicines WHERE expiry_date <= CURDATE() AND stock_qty > 0 AND is_active = TRUE) AS expired_count,
+        (SELECT COUNT(*) FROM Medicines WHERE expiry_date > CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND stock_qty > 0 AND is_active = TRUE) AS expiring_soon_count,
         (SELECT fn_get_total_inventory_value()) AS total_inventory_valuation,
         (SELECT COALESCE(SUM(quantity), 0) FROM Dispensations WHERE DATE(dispensed_at) = CURDATE()) AS today_units_dispensed,
         (SELECT COALESCE(SUM(quantity * unit_price_at_sale), 0.00) FROM Dispensations WHERE DATE(dispensed_at) = CURDATE()) AS today_revenue;

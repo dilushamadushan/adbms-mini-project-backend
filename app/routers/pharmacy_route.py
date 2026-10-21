@@ -114,3 +114,35 @@ def restock_received_order(
     return service.receive_and_restock_order(order_id, staff_id=staff_id, expiry_date=batch_expiry)
 
 
+# ---------------------------------------------------------------------------
+# Prescriptions & Dispensing Endpoints
+# ---------------------------------------------------------------------------
+from app.schema.pharmacy_schema import (
+    PrescriptionQueueItem, DispenseRequest, DispenseResponse, DispensationHistoryItem,
+    PrescriptionSendRequest
+)
+
+@router.get("/prescriptions/pending", response_model=List[PrescriptionQueueItem])
+def get_pending_prescriptions_queue():
+    """List all pending prescriptions sent by doctors waiting to be dispensed."""
+    return service.fetch_pending_prescriptions()
+
+@router.get("/prescriptions/history", response_model=List[DispensationHistoryItem])
+def get_dispensations_history(limit: int = Query(50, ge=1, le=200)):
+    """Audit log of all dispensed prescriptions."""
+    return service.fetch_dispensation_history(limit=limit)
+
+@router.post("/prescriptions/{rx_id}/dispense", response_model=DispenseResponse)
+def dispense_medication_to_patient(rx_id: int, payload: DispenseRequest):
+    """
+    Confirm dispensing of prescribed medication to patient.
+    Triggers automatically deduct inventory stock and verify stock availability.
+    """
+    return service.dispense_prescription(rx_id, payload)
+
+@router.post("/prescriptions/send/{appointment_id}")
+def send_prescription_from_doctor(appointment_id: int, payload: PrescriptionSendRequest):
+    """Direct clinical transmission of prescription from doctor consultation to pharmacy queue."""
+    return service.dispatch_doctor_prescription(appointment_id, payload)
+
+

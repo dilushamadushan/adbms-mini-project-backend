@@ -366,4 +366,211 @@ def restock_delivered_order(conn: MySQLConnection, order_id: int, staff_id: int,
     finally:
         cursor.close()
 
+# ---------------------------------------------------------------------------
+# Prescriptions & Live Dispensing Queue Repositories
+# ---------------------------------------------------------------------------
+def get_prescriptions_queue(conn: MySQLConnection, status_filter: str = "PENDING") -> List[Dict[str, Any]]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT 
+                p.rx_id,
+                p.record_id,
+                p.med_name,
+                p.dosage,
+                p.duration,
+                p.created_at AS prescribed_at,
+                mr.patient_id,
+                CONCAT(pt.first_name, ' ', pt.last_name) AS patient_name,
+                pt.allergies,
+                CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name,
+                m.medicine_id,
+                m.med_name AS inventory_med_name,
+                m.stock_qty,
+                m.unit_price,
+                d.dispense_id,
+                IF(d.dispense_id IS NOT NULL, TRUE, FALSE) AS is_dispensed
+            FROM Prescriptions p
+            JOIN Medical_Records mr ON p.record_id = mr.record_id
+            JOIN Patients pt ON mr.patient_id = pt.patient_id
+            JOIN Staff doc ON mr.doctor_id = doc.staff_id
+            LEFT JOIN Dispensations d ON p.rx_id = d.rx_id
+            LEFT JOIN Medicines m ON (
+                LOWER(m.med_name) LIKE CONCAT('%', LOWER(p.med_name), '%') 
+                OR LOWER(p.med_name) LIKE CONCAT('%', LOWER(m.med_name), '%')
+            )
+        """
+        if status_filter == "PENDING":
+            query += " WHERE d.dispense_id IS NULL"
+        elif status_filter == "DISPENSED":
+            query += " WHERE d.dispense_id IS NOT NULL"
+        
+        query += " ORDER BY p.created_at DESC"
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        # Deduplicate rows by rx_id if LIKE match matched multiple medicines
+        seen = set()
+        deduped = []
+        for r in rows:
+            if r['rx_id'] not in seen:
+                seen.add(r['rx_id'])
+                deduped.append(r)
+        return deduped
+    finally:
+        cursor.close()
+
+def record_dispensation(
+    conn: MySQLConnection,
+    rx_id: int,
+    medicine_id: int,
+    quantity: int,
+    pharmacist_id: int = 5,
+    admission_id: Optional[int] = None
+) -> Dict[str, Any]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 1. Check if already dispensed
+        cursor.execute("SELECT dispense_id FROM Dispensations WHERE rx_id = %s", (rx_id,))
+        if cursor.fetchone():
+            raise ValueError(f"Prescription #{rx_id} has already been dispensed.")
+
+        # 2. Get medicine details & current price
+        cursor.execute("SELECT med_name, unit_price, stock_qty FROM Medicines WHERE medicine_id = %s", (medicine_id,))
+        med = cursor.fetchone()
+        if not med:
+            raise ValueError(f"Medicine #{medicine_id} not found in inventory.")
+        if med["stock_qty"] < quantity:
+            raise ValueError(f"Insufficient stock for '{med['med_name']}'. In stock: {med['stock_qty']}, requested: {quantity}")
+
+        unit_price = med["unit_price"]
+
+        # 3. Insert into Dispensations (triggers trg_after_dispensation_insert will auto-decrement Medicines.stock_qty!)
+        insert_query = """
+            INSERT INTO Dispensations (
+                rx_id, medicine_id, pharmacist_id, admission_id, quantity, unit_price_at_sale, dispensed_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        """
+        cursor.execute(insert_query, (rx_id, medicine_id, pharmacist_id, admission_id, quantity, unit_price))
+        dispense_id = cursor.lastrowid
+
+        # 4. Fetch updated remaining stock & timestamp
+        cursor.execute("SELECT stock_qty FROM Medicines WHERE medicine_id = %s", (medicine_id,))
+        updated_stock = cursor.fetchone()["stock_qty"]
+        cursor.execute("SELECT dispensed_at FROM Dispensations WHERE dispense_id = %s", (dispense_id,))
+        dispensed_time = cursor.fetchone()["dispensed_at"]
+
+        return {
+            "success": True,
+            "message": f"Successfully dispensed {quantity} units. Inventory deducted automatically.",
+            "dispense_id": dispense_id,
+            "rx_id": rx_id,
+            "medicine_id": medicine_id,
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "total_price": unit_price * quantity,
+            "remaining_stock": updated_stock,
+            "dispensed_at": dispensed_time
+        }
+    finally:
+        cursor.close()
+
+def get_dispensations_history(conn: MySQLConnection, limit: int = 50) -> List[Dict[str, Any]]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT 
+                d.dispense_id,
+                d.rx_id,
+                CONCAT(pt.first_name, ' ', pt.last_name) AS patient_name,
+                CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name,
+                m.med_name,
+                d.quantity,
+                d.unit_price_at_sale,
+                (d.quantity * d.unit_price_at_sale) AS total_revenue,
+                d.dispensed_at,
+                COALESCE(CONCAT(pharm.first_name, ' ', pharm.last_name), 'Alex Taylor') AS pharmacist_name
+            FROM Dispensations d
+            JOIN Prescriptions p ON d.rx_id = p.rx_id
+            JOIN Medical_Records mr ON p.record_id = mr.record_id
+            JOIN Patients pt ON mr.patient_id = pt.patient_id
+            JOIN Staff doc ON mr.doctor_id = doc.staff_id
+            JOIN Medicines m ON d.medicine_id = m.medicine_id
+            LEFT JOIN Staff pharm ON d.pharmacist_id = pharm.staff_id
+            ORDER BY d.dispensed_at DESC
+            LIMIT %s
+        """
+        cursor.execute(query, (limit,))
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+
+def save_doctor_prescription(conn: MySQLConnection, appointment_id: int, medications: List[Dict[str, Any]]) -> Dict[str, Any]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 1. Lookup appointment
+        cursor.execute("""
+            SELECT apt_id, patient_id, doctor_id 
+            FROM Appointments 
+            WHERE apt_id = %s
+        """, (appointment_id,))
+        apt = cursor.fetchone()
+        if not apt:
+            patient_id = 1
+            doctor_id = 1
+            apt_id = None
+        else:
+            patient_id = apt["patient_id"]
+            doctor_id = apt["doctor_id"]
+            apt_id = apt["apt_id"]
+
+        # 2. Lookup or create Medical_Record
+        cursor.execute("""
+            SELECT record_id FROM Medical_Records 
+            WHERE patient_id = %s AND doctor_id = %s 
+            ORDER BY created_at DESC LIMIT 1
+        """, (patient_id, doctor_id))
+        rec = cursor.fetchone()
+        if rec:
+            record_id = rec["record_id"]
+        else:
+            cursor.execute("""
+                INSERT INTO Medical_Records (patient_id, doctor_id, apt_id, diagnosis, notes, created_at)
+                VALUES (%s, %s, %s, 'Clinical Consultation', 'Prescription dispatched to pharmacy', NOW())
+            """, (patient_id, doctor_id, apt_id))
+            record_id = cursor.lastrowid
+
+        # 3. Insert each medication into Prescriptions
+        rx_ids = []
+        for m in medications:
+            med_name = m.get("medicine") or "Medication"
+            dosage = f"{m.get('dose', '')} {m.get('frequency', '')}".strip() or "Standard Dose"
+            duration = m.get("duration") or "7 Days"
+            cursor.execute("""
+                INSERT INTO Prescriptions (record_id, med_name, dosage, duration, status, created_at)
+                VALUES (%s, %s, %s, %s, 'Active', NOW())
+            """, (record_id, med_name, dosage, duration))
+            rx_ids.append(cursor.lastrowid)
+
+        # 4. Insert notification for Pharmacists
+        cursor.execute("""
+            INSERT INTO Notifications (title, message, type, target_role, created_at)
+            VALUES (
+                'New Doctor Prescription',
+                CONCAT('New prescription sent for patient #', %s, ' with ', %s, ' item(s).'),
+                'PRESCRIPTION',
+                'pharmacist',
+                NOW()
+            )
+        """, (patient_id, len(medications)))
+
+        return {
+            "success": True,
+            "message": f"Successfully sent {len(medications)} prescribed medication(s) to pharmacy.",
+            "record_id": record_id,
+            "rx_ids": rx_ids
+        }
+    finally:
+        cursor.close()
+
 

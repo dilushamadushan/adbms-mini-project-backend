@@ -26,7 +26,7 @@ INSERT INTO Medicines (medicine_id, med_name, generic_name, unit_price, stock_qt
     (18, 'Doxycycline 100mg',       'Doxycycline Hyclate',       16.00,    8, 25, '2026-12-05', TRUE),
     (19, 'Furosemide 40mg',         'Furosemide',                 6.00,  250, 40, '2027-09-18', TRUE),
     (20, 'Montelukast 10mg',        'Montelukast Sodium',        38.00,  110, 25, '2027-06-22', TRUE),
-    (21, 'Ceftriaxone 1g Injection','Ceftriaxone Sodium',       620.00,    0, 15, '2026-09-30', TRUE),
+    (21, 'Ceftriaxone 1g Injection','Ceftriaxone Sodium',       620.00,   50, 15, '2027-11-30', TRUE),
     (22, 'Tramadol 50mg',           'Tramadol Hydrochloride',    22.00,   80, 20, '2027-07-14', TRUE),
     (23, 'Glibenclamide 5mg',       'Glibenclamide',              7.50,  160, 30, '2027-12-10', TRUE),
     (24, 'Levothyroxine 50mcg',     'Levothyroxine Sodium',      14.00,  320, 50, '2028-02-15', TRUE),
