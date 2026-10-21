@@ -115,3 +115,82 @@ def revoke_all_user_tokens_sp(conn: MySQLConnection, user_id: int) -> int:
         return results[1]
     finally:
         cursor.close()
+
+
+def get_user_by_email(conn: MySQLConnection, email: str) -> Optional[dict]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT user_id, username, email, password_hash, role, is_active FROM Users WHERE LOWER(email) = LOWER(%s)",
+            (email,)
+        )
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+
+
+def create_password_reset_otp(
+    conn: MySQLConnection,
+    user_id: int,
+    email: str,
+    otp_code: str,
+    expires_at: datetime
+) -> int:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE Password_Reset_OTPs SET is_used = TRUE WHERE user_id = %s AND is_used = FALSE",
+            (user_id,)
+        )
+        cursor.execute(
+            """
+            INSERT INTO Password_Reset_OTPs (user_id, email, otp_code, expires_at, is_used)
+            VALUES (%s, %s, %s, %s, FALSE)
+            """,
+            (user_id, email, otp_code, expires_at)
+        )
+        return cursor.lastrowid
+    finally:
+        cursor.close()
+
+
+def get_latest_valid_otp(conn: MySQLConnection, email: str) -> Optional[dict]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT otp_id, user_id, email, otp_code, expires_at, is_used, created_at
+            FROM Password_Reset_OTPs
+            WHERE LOWER(email) = LOWER(%s) AND is_used = FALSE
+            ORDER BY otp_id DESC
+            LIMIT 1
+            """,
+            (email,)
+        )
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+
+
+def mark_otp_as_used(conn: MySQLConnection, otp_id: int) -> int:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE Password_Reset_OTPs SET is_used = TRUE WHERE otp_id = %s",
+            (otp_id,)
+        )
+        return cursor.rowcount
+    finally:
+        cursor.close()
+
+
+def update_user_password(conn: MySQLConnection, user_id: int, new_password_hash: str) -> int:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE Users SET password_hash = %s WHERE user_id = %s",
+            (new_password_hash, user_id)
+        )
+        return cursor.rowcount
+    finally:
+        cursor.close()
