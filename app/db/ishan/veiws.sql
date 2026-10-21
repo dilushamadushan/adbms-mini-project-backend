@@ -1,3 +1,38 @@
+-------------docter-------------------
+
+-- //get  all departments
+
+CREATE OR REPLACE VIEW vw_ward_names AS
+SELECT ward_name
+FROM wards
+ORDER BY ward_name;
+
+-- //get all admissions data
+
+CREATE OR REPLACE VIEW vw_admissions_data AS
+SELECT admission_id, patient_id, ward_id, bed_id, admitted_doctor_id, admitted_by,
+       admitted_at, admission_reason, guardian_name, guardian_relationship,
+       guardian_contact, gender, status
+FROM admissions;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 -----------------------patient------------------------------------------
 
 
