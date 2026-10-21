@@ -11,6 +11,7 @@ from app.routers.Docter.docter_route import router as docter_router
 from app.routers.Patient.patient_route import router as patient_router
 from app.routers.appointment_route import router as appointment_router
 from app.routers.Nurse.nurse_route import router as nurse_router
+from app.routers.recep_route import router as recep_router
 
 
 router = APIRouter()
@@ -36,3 +37,4 @@ router.include_router(docter_router)
 router.include_router(patient_router)
 router.include_router(appointment_router)
 router.include_router(nurse_router)
+router.include_router(recep_router)

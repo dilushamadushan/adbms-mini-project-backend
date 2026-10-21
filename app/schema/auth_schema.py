@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 class LoginRequest(BaseModel):
@@ -27,3 +27,20 @@ class MessageResponse(BaseModel):
 class LogoutAllResponse(BaseModel):
     message: str
     revoked_sessions: int
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class VerifyOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+class VerifyOtpResponse(BaseModel):
+    valid: bool = True
+    message: str
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: str
+    confirm_password: Optional[str] = None

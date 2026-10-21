@@ -1,14 +1,18 @@
 from typing import Optional
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Response, status
 
 from app.core.security import REFRESH_TOKEN_EXPIRE_DAYS, get_current_user_payload
 from app.schema.auth_schema import (
+    ForgotPasswordRequest,
     LoginRequest,
     LogoutAllResponse,
     MessageResponse,
+    ResetPasswordRequest,
     TokenRefreshResponse,
     TokenResponse,
     UserInfo,
+    VerifyOtpRequest,
+    VerifyOtpResponse,
 )
 from app.services import auth_service
 
@@ -100,3 +104,32 @@ def get_current_user(token_payload: dict = Depends(get_current_user_payload)):
         is_active=bool(user["is_active"]),
         active_sessions=user.get("active_sessions"),
     )
+
+
+@router.post("/forgot-password", response_model=MessageResponse, status_code=status.HTTP_200_OK)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+):
+    result = auth_service.request_password_reset_otp(payload.email, background_tasks)
+    return MessageResponse(message=result["message"])
+
+
+@router.post("/verify-otp", response_model=VerifyOtpResponse, status_code=status.HTTP_200_OK)
+def verify_otp(payload: VerifyOtpRequest):
+    result = auth_service.verify_password_reset_otp(payload.email, payload.otp)
+    return VerifyOtpResponse(
+        valid=result.get("valid", True),
+        message=result["message"],
+    )
+
+
+@router.post("/reset-password", response_model=MessageResponse, status_code=status.HTTP_200_OK)
+def reset_password(payload: ResetPasswordRequest):
+    result = auth_service.reset_password_with_otp(
+        email=payload.email,
+        otp_code=payload.otp,
+        new_password=payload.new_password,
+        confirm_password=payload.confirm_password,
+    )
+    return MessageResponse(message=result["message"])
