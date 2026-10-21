@@ -186,7 +186,7 @@ BEGIN
         'New Department Created',
         CONCAT('New department "', NEW.dept_name, '" (ID #', NEW.dept_id, ') has been established in the hospital.'),
         'DEPARTMENT_ADDED',
-        'admin',
+        'all',
         JSON_OBJECT(
             'dept_id', NEW.dept_id,
             'dept_name', NEW.dept_name,
@@ -211,7 +211,7 @@ BEGIN
         'Department Removed',
         CONCAT('Department "', OLD.dept_name, '" (ID #', OLD.dept_id, ') has been removed.'),
         'DEPARTMENT_DELETED',
-        'admin',
+        'all',
         JSON_OBJECT(
             'dept_id', OLD.dept_id,
             'dept_name', OLD.dept_name
