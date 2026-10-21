@@ -167,6 +167,18 @@ CREATE TABLE IF NOT EXISTS Refresh_Tokens (
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS Password_Reset_OTPs (
+    otp_id       INT AUTO_INCREMENT PRIMARY KEY,
+    user_id      INT NOT NULL,
+    email        VARCHAR(255) NOT NULL,
+    otp_code     VARCHAR(10) NOT NULL,
+    expires_at   DATETIME NOT NULL,
+    is_used      BOOLEAN DEFAULT FALSE,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    INDEX idx_user_otp (email, otp_code, is_used, expires_at)
+);
+
 CREATE TABLE IF NOT EXISTS Notifications (
     notification_id INT AUTO_INCREMENT PRIMARY KEY,
     title           VARCHAR(255) NOT NULL,
@@ -181,8 +193,6 @@ CREATE TABLE IF NOT EXISTS Notifications (
     INDEX idx_notifications_user (target_user_id, is_read),
     FOREIGN KEY (target_user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
-<<<<<<< HEAD
-=======
 
 CREATE TABLE IF NOT EXISTS Admissions (
     admission_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -273,4 +283,4 @@ CREATE TABLE IF NOT EXISTS Dispensations (
     INDEX idx_disp_pharmacist (pharmacist_id, dispensed_at),
     INDEX idx_disp_medicine   (medicine_id, dispensed_at)
 );
->>>>>>> 4b81bc23de82aeaad38d89736d7ba32adb4aab3b
+

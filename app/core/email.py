@@ -82,3 +82,16 @@ def send_patient_welcome_email(to_email: str, first_name: str, last_name: str, u
         "patient_welcome_email.html",
         {"first_name": first_name, "last_name": last_name, "username": username, "raw_password": raw_password}
     )
+
+
+def send_password_reset_otp_email(to_email: str, username: str, otp_code: str, expire_minutes: int = 10) -> bool:
+    return send_email(
+        to_email,
+        "MediCore HMS - Password Reset Verification Code",
+        "password_reset_otp.html",
+        {
+            "username": username,
+            "otp_code": otp_code,
+            "expire_minutes": expire_minutes,
+        }
+    )

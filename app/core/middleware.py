@@ -9,6 +9,9 @@ from app.core.security import decode_token
 PUBLIC_PATH_PREFIXES = (
     "/auth/login",
     "/auth/refresh",
+    "/auth/forgot-password",
+    "/auth/verify-otp",
+    "/auth/reset-password",
     "/docs",
     "/redoc",
     "/openapi.json",
