@@ -285,40 +285,11 @@ class IntakeOutputCreate(BaseModel):
     notes: Optional[str] = None
 
 
-class ShiftHandoverItem(BaseModel):
-    handover_id: int
-    ward_id: int
-    ward_name: Optional[str] = None
-    outgoing_nurse_id: int
-    outgoing_nurse_name: Optional[str] = None
-    incoming_nurse_id: Optional[int] = None
-    incoming_nurse_name: Optional[str] = None
-    shift_type: str
-    handover_date: str
-    summary_notes: str
-    critical_patients_count: int
-    pending_tasks_count: int
-    status: str
-    accepted_at: Optional[str] = None
-    created_at: str
 
+class NurseStaffItem(BaseModel):
+    staff_id: int
+    user_id: int
+    nurse_name: str
+    username: str
+    specialty: Optional[str] = None
 
-class ShiftHandoverCreate(BaseModel):
-    shift_type: str = Field(..., description="'Day', 'Evening', 'Night'")
-    summary_notes: str = Field(..., description="Handover summary for incoming nurse")
-
-
-class WardInventoryItem(BaseModel):
-    request_id: int
-    ward_id: int
-    item_name: str
-    quantity: int
-    status: str
-    created_at: str
-    requested_by_nurse: Optional[str] = None
-
-
-class WardInventoryCreate(BaseModel):
-    medicine_id: Optional[int] = None
-    item_name: str = Field(..., description="Medicine or consumable name")
-    quantity: int = Field(..., ge=1, description="Quantity requested")

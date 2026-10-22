@@ -354,70 +354,15 @@ def get_patient_io_summary(
         cursor.close()
 
 
-def get_current_shift_handover(conn: MySQLConnection, nurse_user_id: int) -> List[Dict[str, Any]]:
+
+def get_ward_nurses(conn: MySQLConnection) -> List[Dict[str, Any]]:
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.callproc("sp_get_current_shift_handover", (nurse_user_id,))
+        cursor.callproc("sp_get_ward_nurses")
         results = []
         for r in cursor.stored_results():
             for row in r.fetchall():
                 results.append(_serialize_row(row))
         return results
-    finally:
-        cursor.close()
-
-
-def create_shift_handover(
-    conn: MySQLConnection, nurse_user_id: int, shift_type: str, summary_notes: str
-) -> Dict[str, Any]:
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.callproc("sp_create_shift_handover", (nurse_user_id, shift_type, summary_notes))
-        for r in cursor.stored_results():
-            row = r.fetchone()
-            if row:
-                return _serialize_row(row)
-        raise RuntimeError("Failed to create shift handover.")
-    finally:
-        cursor.close()
-
-
-def accept_shift_handover(conn: MySQLConnection, handover_id: int, nurse_user_id: int) -> Dict[str, Any]:
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.callproc("sp_accept_shift_handover", (handover_id, nurse_user_id))
-        for r in cursor.stored_results():
-            row = r.fetchone()
-            if row:
-                return _serialize_row(row)
-        return {"handover_id": handover_id, "status": "Accepted"}
-    finally:
-        cursor.close()
-
-
-def get_ward_inventory_requests(conn: MySQLConnection, nurse_user_id: int) -> List[Dict[str, Any]]:
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.callproc("sp_get_ward_inventory_requests", (nurse_user_id,))
-        results = []
-        for r in cursor.stored_results():
-            for row in r.fetchall():
-                results.append(_serialize_row(row))
-        return results
-    finally:
-        cursor.close()
-
-
-def request_ward_stock(
-    conn: MySQLConnection, nurse_user_id: int, medicine_id: Optional[int], item_name: str, quantity: int
-) -> Dict[str, Any]:
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.callproc("sp_request_ward_stock", (nurse_user_id, medicine_id, item_name, quantity))
-        for r in cursor.stored_results():
-            row = r.fetchone()
-            if row:
-                return _serialize_row(row)
-        raise RuntimeError("Failed to create stock request.")
     finally:
         cursor.close()

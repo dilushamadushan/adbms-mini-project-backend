@@ -163,28 +163,7 @@ def get_patient_io_summary(patient_id: int, target_date: Optional[str] = None) -
         return nurse_repo.get_patient_io_summary(conn, patient_id, target_date)
 
 
-def get_current_shift_handover(nurse_user_id: int) -> List[Dict[str, Any]]:
+def get_ward_nurses() -> List[Dict[str, Any]]:
     with get_db() as conn:
-        return nurse_repo.get_current_shift_handover(conn, nurse_user_id)
+        return nurse_repo.get_ward_nurses(conn)
 
-
-def create_shift_handover(nurse_user_id: int, shift_type: str, summary_notes: str) -> Dict[str, Any]:
-    with get_db() as conn:
-        return nurse_repo.create_shift_handover(conn, nurse_user_id, shift_type, summary_notes)
-
-
-def accept_shift_handover(handover_id: int, nurse_user_id: int) -> Dict[str, Any]:
-    with get_db() as conn:
-        return nurse_repo.accept_shift_handover(conn, handover_id, nurse_user_id)
-
-
-def get_ward_inventory_requests(nurse_user_id: int) -> List[Dict[str, Any]]:
-    with get_db() as conn:
-        return nurse_repo.get_ward_inventory_requests(conn, nurse_user_id)
-
-
-def request_ward_stock(
-    nurse_user_id: int, medicine_id: Optional[int], item_name: str, quantity: int
-) -> Dict[str, Any]:
-    with get_db() as conn:
-        return nurse_repo.request_ward_stock(conn, nurse_user_id, medicine_id, item_name, quantity)
