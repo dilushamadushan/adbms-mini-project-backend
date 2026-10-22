@@ -13,7 +13,7 @@ import string
 _ADMISSION_SELECT = """
     SELECT a.admission_id, a.patient_id,
            CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
-           a.ward_id, w.ward_name, a.bed_id, b.bed_number, a.admitted_at,
+           a.ward_id, w.ward_name, a.bed_id, b.bed_number, a.admitted_at, a.created_at,
            a.admitted_doctor_id,
            CONCAT('Dr. ', ds.first_name, ' ', ds.last_name) AS admitted_doctor_name,
            a.admission_reason, a.guardian_name, a.guardian_relationship,

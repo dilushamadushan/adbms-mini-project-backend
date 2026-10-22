@@ -60,6 +60,7 @@ class AdmissionResponse(BaseModel):
     bed_id: Optional[int] = None
     bed_number: Optional[str] = None
     admitted_at: datetime
+    created_at: datetime
     admission_reason: str
     status: str
     discharge_authorized_by: Optional[int] = None
