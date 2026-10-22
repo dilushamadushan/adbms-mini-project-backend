@@ -380,6 +380,47 @@ def create_admission(
         cursor.close()
 
 
+def complete_admission_guardian(
+    conn: MySQLConnection,
+    admission_id: int,
+    guardian_name: str,
+    guardian_relationship: str,
+    guardian_contact: str,
+) -> bool:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE Admissions
+            SET guardian_name = %s,
+                guardian_relationship = %s,
+                guardian_contact = %s
+            WHERE admission_id = %s
+              AND status IN ('Pending', 'Admitted')
+              AND (
+                  guardian_name IS NULL OR TRIM(guardian_name) = ''
+                  OR guardian_relationship IS NULL OR TRIM(guardian_relationship) = ''
+                  OR guardian_contact IS NULL OR TRIM(guardian_contact) = ''
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM Discharges d
+                  WHERE d.admission_id = Admissions.admission_id
+                    AND d.status = 'Discharged'
+              )
+            """,
+            (
+                guardian_name,
+                guardian_relationship,
+                guardian_contact,
+                admission_id,
+            ),
+        )
+        return cursor.rowcount == 1
+    finally:
+        cursor.close()
+
+
 def assign_admission_bed(
     conn: MySQLConnection, admission_id: int, bed_id: int
 ) -> bool:
