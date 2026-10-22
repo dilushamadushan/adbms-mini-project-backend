@@ -91,6 +91,41 @@ def admit_patient(
         return recep_repo.get_admission(conn, admission_id)
 
 
+def complete_admission_guardian(
+    user_id: int,
+    role: str,
+    admission_id: int,
+    guardian_name: str,
+    guardian_relationship: str,
+    guardian_contact: str,
+) -> dict[str, Any]:
+    _require_receptionist(role)
+    if not guardian_name.strip():
+        raise HTTPException(status_code=400, detail="Guardian name is required")
+    if not guardian_relationship.strip():
+        raise HTTPException(status_code=400, detail="Guardian relationship is required")
+    if not re.fullmatch(r"\+?[0-9\s().-]{7,20}", guardian_contact.strip()):
+        raise HTTPException(status_code=400, detail="Enter a valid guardian contact number")
+
+    with get_db() as conn:
+        updated = recep_repo.complete_admission_guardian(
+            conn,
+            admission_id,
+            guardian_name.strip(),
+            guardian_relationship.strip(),
+            guardian_contact.strip(),
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=409,
+                detail="This admission is no longer active or already has guardian details.",
+            )
+        admission = recep_repo.get_admission(conn, admission_id)
+        if not admission:
+            raise HTTPException(status_code=404, detail="Admission not found after guardian update")
+        return admission
+
+
 def assign_admission_bed(
     user_id: int, role: str, admission_id: int, bed_id: int
 ) -> dict[str, Any]:
