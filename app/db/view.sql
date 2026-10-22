@@ -102,7 +102,30 @@ SELECT
     ) AS actor,
     a.action_type AS action,
     COALESCE(a.resource_table, 'System') AS resource,
-    fn_get_audit_risk(a.action_type, a.details) AS risk,
+    CASE
+        WHEN JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.risk')) IS NOT NULL 
+             AND UPPER(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.risk'))) IN ('HIGH', 'MEDIUM', 'LOW')
+            THEN UPPER(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.risk')))
+        WHEN UPPER(COALESCE(a.action_type, '')) LIKE '%DELETE%' 
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%DROP%' 
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%REVOKE%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%PURGE%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%UNAUTHORIZED%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%BREACH%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%FAIL%'
+            THEN 'HIGH'
+        WHEN UPPER(COALESCE(a.action_type, '')) LIKE '%UPDATE%' 
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%MODIFY%' 
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%PASSWORD%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%ROLE%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%STATUS%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%USER%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%DIAGNOSIS%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%PRESCRIPTION%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%CREATE%'
+            THEN 'MEDIUM'
+        ELSE 'LOW'
+    END AS risk,
     a.details
 FROM Audit_Logs a
 LEFT JOIN Users u ON a.actor_id = u.user_id

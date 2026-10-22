@@ -58,3 +58,21 @@ class PatientProfileResponse(BaseModel):
 
 class UserStatusUpdate(BaseModel):
     is_active: bool
+
+
+class StaffUserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    dept_id: Optional[int] = None
+    specialty: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    username: Optional[str] = None
+
+
+class StaffDeleteResponse(BaseModel):
+    message: str
+    staff_id: int
+    user_id: int
+    is_active: Optional[bool] = None
