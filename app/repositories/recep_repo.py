@@ -24,7 +24,7 @@ _ADMISSION_SELECT = """
                ELSE a.status
            END AS status,
            dis.discharge_authorized_by,
-           dis.discharge_authorized_at, dis.discharge_notes,
+           dis.discharge_authorized_at, dis.discharge_notes, dis.discharged_at,
            NULL AS bill_id, NULL AS room_charges, NULL AS treatment_charges,
            NULL AS other_charges, NULL AS total_amount, NULL AS amount_paid,
            NULL AS payment_method, NULL AS payment_status
