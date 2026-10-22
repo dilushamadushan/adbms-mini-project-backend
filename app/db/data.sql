@@ -29,15 +29,21 @@ INSERT INTO Departments (dept_name, parent_dept_id) VALUES
 --   patient.jane:      Patient@123
 --   patient.bob:       Patient@123
 --   pharmacist.alex:   Pharmacist@123
+--   patient.alice:     Patient@123
+--   patient.david:     Patient@123
+--   patient.mary:      Patient@123
 INSERT INTO Users (user_id, username, email, password_hash, role, is_active) VALUES
-    (1, 'admin',             'admin@hospital.com',        'e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7', 'admin',        TRUE),
-    (2, 'dr.smith',          'dr.smith@hospital.com',     '63bbe564aa5c0882355f6dcd6f2241b6f8d02d6f39725966ae564cd310f07850', 'doctor',       TRUE),
-    (3, 'dr.emily',          'dr.emily@hospital.com',     '63bbe564aa5c0882355f6dcd6f2241b6f8d02d6f39725966ae564cd310f07850', 'doctor',       TRUE),
-    (4, 'nurse.sarah',       'nurse.sarah@hospital.com',  '07429ac3dabe393512f2633b9514473ec7fc452dd202eb7735e60b900d273fd3', 'nurse',        TRUE),
-    (5, 'receptionist.john', 'receptionist@hospital.com', '238f1cf33d39690fba3c171984fc1120a1181d236723d337e6a2fdc8d92ae88a', 'receptionist', TRUE),
-    (6, 'patient.jane',      'jane.doe@example.com',      '6dff47814e92e3a14c9f021d2d3ddd353a03e5bf3b0f49d53e80a1a3606c86d6', 'patient',      TRUE),
-    (7, 'patient.bob',       'bob.smith@example.com',     '6dff47814e92e3a14c9f021d2d3ddd353a03e5bf3b0f49d53e80a1a3606c86d6', 'patient',      TRUE),
-    (8, 'pharmacist.alex',   'pharmacist@hospital.com',   'c1472229be47a378d96367c6245a91bd55f01d0b8dd601d47a9260b8ec33d060', 'pharmacist',   TRUE);
+    (1,  'admin',             'admin@hospital.com',        'e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7', 'admin',        TRUE),
+    (2,  'dr.smith',          'dr.smith@hospital.com',     '63bbe564aa5c0882355f6dcd6f2241b6f8d02d6f39725966ae564cd310f07850', 'doctor',       TRUE),
+    (3,  'dr.emily',          'dr.emily@hospital.com',     '63bbe564aa5c0882355f6dcd6f2241b6f8d02d6f39725966ae564cd310f07850', 'doctor',       TRUE),
+    (4,  'nurse.sarah',       'nurse.sarah@hospital.com',  '07429ac3dabe393512f2633b9514473ec7fc452dd202eb7735e60b900d273fd3', 'nurse',        TRUE),
+    (5,  'receptionist.john', 'receptionist@hospital.com', '238f1cf33d39690fba3c171984fc1120a1181d236723d337e6a2fdc8d92ae88a', 'receptionist', TRUE),
+    (6,  'patient.jane',      'jane.doe@example.com',      '6dff47814e92e3a14c9f021d2d3ddd353a03e5bf3b0f49d53e80a1a3606c86d6', 'patient',      TRUE),
+    (7,  'patient.bob',       'bob.smith@example.com',     '6dff47814e92e3a14c9f021d2d3ddd353a03e5bf3b0f49d53e80a1a3606c86d6', 'patient',      TRUE),
+    (8,  'pharmacist.alex',   'pharmacist@hospital.com',   'c1472229be47a378d96367c6245a91bd55f01d0b8dd601d47a9260b8ec33d060', 'pharmacist',   TRUE),
+    (9,  'patient.alice',    'alice.brown@example.com',   '6dff47814e92e3a14c9f021d2d3ddd353a03e5bf3b0f49d53e80a1a3606c86d6', 'patient',      TRUE),
+    (10, 'patient.david',    'david.perera@example.com',  '6dff47814e92e3a14c9f021d2d3ddd353a03e5bf3b0f49d53e80a1a3606c86d6', 'patient',      TRUE),
+    (11, 'patient.mary',     'mary.fernando@example.com', '6dff47814e92e3a14c9f021d2d3ddd353a03e5bf3b0f49d53e80a1a3606c86d6', 'patient',      TRUE);
 
 INSERT INTO Staff (staff_id, user_id, dept_id, first_name, last_name, specialty) VALUES
     (1, 2, 1,  'John',  'Smith',    'Cardiologist'),
@@ -47,8 +53,11 @@ INSERT INTO Staff (staff_id, user_id, dept_id, first_name, last_name, specialty)
     (5, 8, 11, 'Alex',  'Taylor',    'Pharmacist');
 
 INSERT INTO Patients (patient_id, user_id, first_name, last_name, dob, blood_group, emergency_contact, allergies) VALUES
-    (1, 6, 'Jane', 'Doe',   '1995-04-12', 'O+',  '9876543210', 'Penicillin'),
-    (2, 7, 'Bob',  'Smith', '1988-11-23', 'A+',  '9123456780', 'None');
+    (1, 6,  'Jane',  'Doe',      '1995-04-12', 'O+',  '9876543210', 'Penicillin'),
+    (2, 7,  'Bob',   'Smith',    '1988-11-23', 'A+',  '9123456780', 'None'),
+    (3, 9,  'Alice', 'Brown',    '1992-06-15', 'B+',  '0112235698', 'Sulfa drugs'),
+    (4, 10, 'David', 'Perera',   '1985-09-20', 'AB+', '011225578',  'None'),
+    (5, 11, 'Mary',  'Fernando', '1998-03-08', 'O-',  '02266547',   'Aspirin');
 
 INSERT INTO Appointments (apt_id, patient_id, doctor_id, dept_id, apt_date, time_slot, status) VALUES
     (1, 1, 1, 1, '2026-10-10', '09:30:00', 'Completed'),

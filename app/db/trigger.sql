@@ -1,8 +1,21 @@
-USE hms;
+-- TG/1407 --
+
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_issued;
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_revoked;
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_deleted; 
+DROP TRIGGER IF EXISTS trg_prevent_department_self_parent;
+DROP TRIGGER IF EXISTS trg_audit_department_created;
+DROP TRIGGER IF EXISTS trg_audit_department_deleted; 
+DROP TRIGGER IF EXISTS trg_notify_staff_created;
+DROP TRIGGER IF EXISTS trg_notify_department_created;
+DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment;
+DROP TRIGGER IF EXISTS trg_notify_admission_created; 
+DROP TRIGGER IF EXISTS trg_prevent_duplicate_open_admission; 
+DROP TRIGGER IF EXISTS trg_notify_admission_confirmed; 
+DROP TRIGGER IF EXISTS trg_notify_admission_inserted;
+DROP TRIGGER IF EXISTS trg_notify_department_deleted;
 
 DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_issued; //
 
 CREATE TRIGGER trg_audit_refresh_token_issued
 AFTER INSERT ON Refresh_Tokens
@@ -21,12 +34,6 @@ BEGIN
         )
     );
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_revoked; //
 
 CREATE TRIGGER trg_audit_refresh_token_revoked
 AFTER UPDATE ON Refresh_Tokens
@@ -48,12 +55,6 @@ BEGIN
     END IF;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_deleted; //
-
 CREATE TRIGGER trg_audit_refresh_token_deleted
 AFTER DELETE ON Refresh_Tokens
 FOR EACH ROW
@@ -72,12 +73,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_prevent_department_self_parent; //
-
 CREATE TRIGGER trg_prevent_department_self_parent
 BEFORE UPDATE ON Departments
 FOR EACH ROW
@@ -87,12 +82,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Integrity violation: A department cannot be set as its own parent';
     END IF;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_department_created; //
 
 CREATE TRIGGER trg_audit_department_created
 AFTER INSERT ON Departments
@@ -112,12 +101,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_department_deleted; //
-
 CREATE TRIGGER trg_audit_department_deleted
 AFTER DELETE ON Departments
 FOR EACH ROW
@@ -135,12 +118,6 @@ BEGIN
         NOW()
     );
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_staff_created; //
 
 CREATE TRIGGER trg_notify_staff_created
 AFTER INSERT ON Staff
@@ -171,12 +148,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_department_created; //
-
 CREATE TRIGGER trg_notify_department_created
 AFTER INSERT ON Departments
 FOR EACH ROW
@@ -196,12 +167,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_department_deleted; //
-
 CREATE TRIGGER trg_notify_department_deleted
 AFTER DELETE ON Departments
 FOR EACH ROW
@@ -220,18 +185,7 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-
-#--------------------------------------
-
-USE hms;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_admission_created; //
-DROP TRIGGER IF EXISTS trg_prevent_duplicate_open_admission; //
-DROP TRIGGER IF EXISTS trg_notify_admission_confirmed; //
+-- TG/13 --
 
 CREATE TRIGGER trg_prevent_duplicate_open_admission
 BEFORE INSERT ON Admissions
@@ -261,8 +215,6 @@ BEGIN
     END IF;
 END //
 
-DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment; //
-
 CREATE TRIGGER trg_prevent_duplicate_admission_assignment
 BEFORE UPDATE ON Admissions
 FOR EACH ROW
@@ -286,8 +238,6 @@ BEGIN
         END IF;
     END IF;
 END //
-
-DROP TRIGGER IF EXISTS trg_notify_admission_inserted; //
 
 CREATE TRIGGER trg_notify_admission_inserted
 AFTER INSERT ON Admissions

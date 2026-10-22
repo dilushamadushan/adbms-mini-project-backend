@@ -1,4 +1,4 @@
-USE hms;
+-- TG/1407 --
 
 CREATE INDEX idx_tokens_expires_revoked 
 ON Refresh_Tokens (expires_at, revoked);

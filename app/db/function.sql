@@ -1,8 +1,16 @@
-USE hms;
+-- TG/1407 --
+
+DROP FUNCTION IF EXISTS fn_is_token_active;
+DROP FUNCTION IF EXISTS fn_get_active_session_count; 
+DROP FUNCTION IF EXISTS fn_get_department_depth; 
+DROP FUNCTION IF EXISTS fn_get_department_staff_count; 
+DROP FUNCTION IF EXISTS fn_calculate_provider_avg_time; 
+DROP FUNCTION IF EXISTS fn_get_workload_level; 
+DROP FUNCTION IF EXISTS fn_get_audit_risk; 
+DROP FUNCTION IF EXISTS fn_bed_occupancy_pct; 
+DROP FUNCTION IF EXISTS fn_recep_get_all_patients;
 
 DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_is_token_active; //
 
 CREATE FUNCTION fn_is_token_active(p_token_hash VARCHAR(255))
 RETURNS BOOLEAN
@@ -18,11 +26,6 @@ BEGIN
     RETURN (v_count > 0);
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_active_session_count; //
 
 CREATE FUNCTION fn_get_active_session_count(p_user_id INT)
 RETURNS INT
@@ -37,12 +40,6 @@ BEGIN
       AND expires_at > NOW();
     RETURN v_active_count;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_department_depth; //
 
 CREATE FUNCTION fn_get_department_depth(p_dept_id INT)
 RETURNS INT
@@ -66,12 +63,6 @@ BEGIN
     RETURN v_depth;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_department_staff_count; //
-
 CREATE FUNCTION fn_get_department_staff_count(p_dept_id INT)
 RETURNS INT
 DETERMINISTIC
@@ -81,12 +72,6 @@ BEGIN
     SELECT COUNT(*) INTO v_count FROM Staff WHERE dept_id = p_dept_id;
     RETURN v_count;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_calculate_provider_avg_time; //
 
 CREATE FUNCTION fn_calculate_provider_avg_time(p_doctor_id INT)
 RETURNS INT
@@ -114,12 +99,6 @@ BEGIN
     END IF;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_workload_level; //
-
 CREATE FUNCTION fn_get_workload_level(p_count INT, p_pct DECIMAL(5,2))
 RETURNS VARCHAR(20)
 DETERMINISTIC
@@ -135,12 +114,6 @@ BEGIN
         RETURN 'Low';
     END IF;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_audit_risk; //
 
 CREATE FUNCTION fn_get_audit_risk(p_action VARCHAR(100), p_details JSON)
 RETURNS VARCHAR(10)
@@ -184,12 +157,6 @@ BEGIN
     END IF;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_bed_occupancy_pct; //
-
 CREATE FUNCTION fn_bed_occupancy_pct(p_ward_id INT)
 RETURNS DECIMAL(5,2)
 DETERMINISTIC
@@ -213,13 +180,6 @@ BEGIN
     RETURN ROUND((v_occupied * 100.0) / v_total, 2);
 END //
 
-DELIMITER ;
-
-USE hms;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_recep_get_all_patients //
 CREATE FUNCTION fn_recep_get_all_patients()
 RETURNS JSON
 READS SQL DATA

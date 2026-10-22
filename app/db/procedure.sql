@@ -1,8 +1,17 @@
-USE hms;
+-- TG/1407 --
+
+DROP PROCEDURE IF EXISTS GetAllPatients;
+DROP PROCEDURE IF EXISTS GetAllStaff;
+DROP PROCEDURE IF EXISTS sp_rotate_refresh_token;
+DROP PROCEDURE IF EXISTS sp_revoke_all_user_sessions;
+DROP PROCEDURE IF EXISTS sp_cleanup_expired_tokens;
+DROP PROCEDURE IF EXISTS sp_get_department_hierarchy;
+DROP PROCEDURE IF EXISTS sp_delete_department;
+DROP PROCEDURE IF EXISTS sp_generate_workload_report;
+DROP PROCEDURE IF EXISTS sp_get_hospital_kpi_overview;
+DROP PROCEDURE IF EXISTS sp_get_audit_logs;
 
 DELIMITER //
-
-DROP PROCEDURE IF EXISTS GetAllPatients; //
 
 CREATE PROCEDURE GetAllPatients()
 BEGIN
@@ -25,12 +34,6 @@ BEGIN
     INNER JOIN Users u ON p.user_id = u.user_id;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS GetAllStaff; //
-
 CREATE PROCEDURE GetAllStaff()
 BEGIN
     SELECT 
@@ -47,12 +50,6 @@ BEGIN
     FROM Staff s
     INNER JOIN Users u ON s.user_id = u.user_id;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_rotate_refresh_token; //
 
 CREATE PROCEDURE sp_rotate_refresh_token(
     IN p_old_token_hash VARCHAR(255),
@@ -96,12 +93,6 @@ BEGIN
     COMMIT;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_revoke_all_user_sessions; //
-
 CREATE PROCEDURE sp_revoke_all_user_sessions(
     IN p_user_id INT,
     OUT p_revoked_count INT
@@ -112,12 +103,6 @@ BEGIN
 
     SET p_revoked_count = ROW_COUNT();
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_cleanup_expired_tokens; //
 
 CREATE PROCEDURE sp_cleanup_expired_tokens(
     IN p_older_than_days INT,
@@ -130,12 +115,6 @@ BEGIN
 
     SET p_deleted_count = ROW_COUNT();
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_get_department_hierarchy; //
 
 CREATE PROCEDURE sp_get_department_hierarchy()
 BEGIN
@@ -173,12 +152,6 @@ BEGIN
     ORDER BY dh.hierarchy_path ASC;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_delete_department; //
-
 CREATE PROCEDURE sp_delete_department(
     IN p_dept_id INT
 )
@@ -211,12 +184,6 @@ BEGIN
 
     COMMIT;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_generate_workload_report; //
 
 CREATE PROCEDURE sp_generate_workload_report(
     IN p_start_date DATE,
@@ -319,12 +286,6 @@ BEGIN
 
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_get_hospital_kpi_overview; //
-
 CREATE PROCEDURE sp_get_hospital_kpi_overview(
     IN p_target_date DATE
 )
@@ -369,12 +330,6 @@ BEGIN
     FROM ApptStats a;
 
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_get_audit_logs; //
 
 CREATE PROCEDURE sp_get_audit_logs(
     IN p_page   INT,

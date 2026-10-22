@@ -1,4 +1,4 @@
-USE hms;
+-- TG/1407 --
 
 CREATE OR REPLACE VIEW vw_department_workload AS
 WITH DeptStats AS (
@@ -130,8 +130,6 @@ SELECT
 FROM Audit_Logs a
 LEFT JOIN Users u ON a.actor_id = u.user_id
 LEFT JOIN Staff s ON u.user_id = s.user_id;
-
-USE hms;
 
 CREATE OR REPLACE VIEW vw_recep_appointments AS
 SELECT a.apt_id, a.patient_id,
