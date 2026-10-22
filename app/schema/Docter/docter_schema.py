@@ -129,3 +129,22 @@ class CreateAdmissionRequest(BaseModel):
 class AdmissionRequestResponse(BaseModel):
     message: str
     admission_id: int
+
+
+class DischargeRequest(BaseModel):
+    admission_id: int
+    doctor_id: int
+    notes: str
+
+
+class DischargeRequestResponse(BaseModel):
+    message: str
+
+
+class CompleteAppointmentRequest(BaseModel):
+    appointment_id: int
+    doctor_id: int
+
+
+class CompleteAppointmentResponse(BaseModel):
+    message: str

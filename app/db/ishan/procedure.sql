@@ -306,6 +306,49 @@ DELIMITER ;
 
 
 
+-- =====================================================
+-- 4. PROCEDURE - ONE-STEP DISCHARGE
+--    Fills authorization AND final discharge details instantly
+-- =====================================================
+DROP PROCEDURE IF EXISTS `request_discharge`;
+
+DELIMITER $$
+CREATE PROCEDURE `request_discharge`(
+  IN p_admission_id INT,
+  IN p_doctor_id INT,
+  IN p_notes TEXT
+)
+BEGIN
+  -- 1. Check if admission is valid and not already discharged
+  IF NOT EXISTS (SELECT 1 FROM `admissions`
+                 WHERE admission_id = p_admission_id AND status <> 'Discharged') THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Admission not found or already discharged';
+  END IF;
+
+  -- 2. Insert into discharges WITH the final completion details included
+  INSERT INTO `discharges` (
+    admission_id, 
+    discharge_authorized_by, 
+    discharge_notes,
+    status,           
+    discharged_by,    
+    discharged_at     
+  )
+  VALUES (
+    p_admission_id, 
+    p_doctor_id, 
+    p_notes,
+    'Discharged',     
+    p_doctor_id,      
+    CURRENT_TIMESTAMP 
+  );
+END$$
+DELIMITER ;
+
+
+
+
 
 -----------------------patient------------------------------------------
 

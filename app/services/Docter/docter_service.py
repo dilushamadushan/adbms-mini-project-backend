@@ -87,6 +87,28 @@ def create_admission_request(
         raise
 
 
+def request_discharge(admission_id: int, doctor_id: int, notes: str):
+    try:
+        with get_db() as conn:
+            docter_repo.request_discharge(conn, admission_id, doctor_id, notes)
+            return {"message": "Discharged"}
+    except mysql.connector.Error as err:
+        if err.sqlstate == "45000":
+            raise ValueError(err.msg) from err
+        raise
+
+
+def complete_appointment(appointment_id: int, doctor_id: int):
+    try:
+        with get_db() as conn:
+            docter_repo.complete_appointment(conn, appointment_id, doctor_id)
+            return {"message": "Appointment marked as completed"}
+    except mysql.connector.Error as err:
+        if err.sqlstate == "45000":
+            raise ValueError(err.msg) from err
+        raise
+
+
 def get_active_admission_by_patient(patient_id: int):
     with get_db() as conn:
         return docter_repo.get_active_admission_by_patient(conn, patient_id)
