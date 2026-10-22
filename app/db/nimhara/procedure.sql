@@ -635,178 +635,28 @@ END //
 DELIMITER ;
 
 
+
 DELIMITER //
 
-DROP PROCEDURE IF EXISTS sp_get_current_shift_handover //
+DROP PROCEDURE IF EXISTS sp_get_ward_nurses //
 
-CREATE PROCEDURE sp_get_current_shift_handover(
-    IN p_nurse_user_id INT
-)
+CREATE PROCEDURE sp_get_ward_nurses()
 BEGIN
-    DECLARE v_staff_id INT;
-    DECLARE v_ward_id INT;
-
-    SELECT staff_id INTO v_staff_id FROM Staff WHERE user_id = p_nurse_user_id;
-    SELECT ward_id INTO v_ward_id FROM Wards WHERE nurse_in_charge_id = v_staff_id LIMIT 1;
-    IF v_ward_id IS NULL THEN
-        SELECT ward_id INTO v_ward_id FROM Wards ORDER BY ward_id ASC LIMIT 1;
-    END IF;
-
     SELECT 
-        sh.handover_id,
-        sh.ward_id,
-        w.ward_name,
-        sh.outgoing_nurse_id,
-        CONCAT(out_nurse.first_name, ' ', out_nurse.last_name) AS outgoing_nurse_name,
-        sh.incoming_nurse_id,
-        CONCAT(in_nurse.first_name, ' ', in_nurse.last_name) AS incoming_nurse_name,
-        sh.shift_type,
-        sh.handover_date,
-        sh.summary_notes,
-        sh.critical_patients_count,
-        sh.pending_tasks_count,
-        sh.status,
-        DATE_FORMAT(sh.accepted_at, '%Y-%m-%d %H:%i') AS accepted_at,
-        DATE_FORMAT(sh.created_at, '%Y-%m-%d %H:%i') AS created_at
-    FROM Shift_Handovers sh
-    INNER JOIN Wards w ON sh.ward_id = w.ward_id
-    INNER JOIN Staff out_nurse ON sh.outgoing_nurse_id = out_nurse.staff_id
-    LEFT JOIN Staff in_nurse ON sh.incoming_nurse_id = in_nurse.staff_id
-    WHERE sh.ward_id = v_ward_id
-    ORDER BY sh.created_at DESC
-    LIMIT 5;
+        s.staff_id,
+        s.user_id,
+        CONCAT(s.first_name, ' ', s.last_name) AS nurse_name,
+        u.username,
+        s.specialty
+    FROM Staff s
+    INNER JOIN Users u ON s.user_id = u.user_id
+    WHERE u.role = 'nurse' AND u.is_active = 1
+    ORDER BY s.first_name ASC;
 END //
 
 DELIMITER ;
 
 
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_create_shift_handover //
-
-CREATE PROCEDURE sp_create_shift_handover(
-    IN p_nurse_user_id INT,
-    IN p_shift_type VARCHAR(20),
-    IN p_summary_notes TEXT
-)
-BEGIN
-    DECLARE v_staff_id INT;
-    DECLARE v_ward_id INT;
-    DECLARE v_crit_count INT;
-    DECLARE v_task_count INT;
-
-    SELECT staff_id INTO v_staff_id FROM Staff WHERE user_id = p_nurse_user_id;
-    IF v_staff_id IS NULL THEN SET v_staff_id = 3; END IF;
-
-    SELECT ward_id INTO v_ward_id FROM Wards WHERE nurse_in_charge_id = v_staff_id LIMIT 1;
-    IF v_ward_id IS NULL THEN
-        SELECT ward_id INTO v_ward_id FROM Wards ORDER BY ward_id ASC LIMIT 1;
-    END IF;
-
-    SELECT COUNT(DISTINCT current_patient_id) INTO v_crit_count
-    FROM Beds 
-    WHERE ward_id = v_ward_id AND current_patient_id IS NOT NULL AND fn_patient_vitals_status(current_patient_id) = 'CRITICAL';
-
-    SELECT COUNT(*) INTO v_task_count 
-    FROM Doctor_Orders do2
-    INNER JOIN Beds b ON do2.patient_id = b.current_patient_id
-    WHERE b.ward_id = v_ward_id AND do2.status = 'Pending';
-
-    INSERT INTO Shift_Handovers (ward_id, outgoing_nurse_id, shift_type, handover_date, summary_notes, critical_patients_count, pending_tasks_count, status, created_at)
-    VALUES (v_ward_id, v_staff_id, p_shift_type, CURDATE(), p_summary_notes, v_crit_count, v_task_count, 'Pending_Acceptance', NOW());
-
-    SELECT handover_id, status FROM Shift_Handovers WHERE handover_id = LAST_INSERT_ID();
-END //
-
-DELIMITER ;
-
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_accept_shift_handover //
-
-CREATE PROCEDURE sp_accept_shift_handover(
-    IN p_handover_id INT,
-    IN p_nurse_user_id INT
-)
-BEGIN
-    DECLARE v_staff_id INT;
-
-    SELECT staff_id INTO v_staff_id FROM Staff WHERE user_id = p_nurse_user_id;
-    IF v_staff_id IS NULL THEN SET v_staff_id = 3; END IF;
-
-    UPDATE Shift_Handovers
-    SET status = 'Accepted', incoming_nurse_id = v_staff_id, accepted_at = NOW()
-    WHERE handover_id = p_handover_id;
-
-    SELECT handover_id, status, 'Handover successfully accepted' AS message
-    FROM Shift_Handovers
-    WHERE handover_id = p_handover_id;
-END //
-
-DELIMITER ;
-
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_get_ward_inventory_requests //
-
-CREATE PROCEDURE sp_get_ward_inventory_requests(
-    IN p_nurse_user_id INT
-)
-BEGIN
-    DECLARE v_staff_id INT;
-    DECLARE v_ward_id INT;
-
-    SELECT staff_id INTO v_staff_id FROM Staff WHERE user_id = p_nurse_user_id;
-    SELECT ward_id INTO v_ward_id FROM Wards WHERE nurse_in_charge_id = v_staff_id LIMIT 1;
-    IF v_ward_id IS NULL THEN SELECT ward_id INTO v_ward_id FROM Wards ORDER BY ward_id ASC LIMIT 1; END IF;
-
-    SELECT 
-        req.request_id,
-        req.ward_id,
-        req.item_name,
-        req.quantity,
-        req.status,
-        DATE_FORMAT(req.created_at, '%Y-%m-%d %H:%i') AS created_at,
-        CONCAT(s.first_name, ' ', s.last_name) AS requested_by_nurse
-    FROM Ward_Inventory_Requests req
-    INNER JOIN Staff s ON req.nurse_id = s.staff_id
-    WHERE req.ward_id = v_ward_id
-    ORDER BY req.created_at DESC
-    LIMIT 20;
-END //
-
-DELIMITER ;
-
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_request_ward_stock //
-
-CREATE PROCEDURE sp_request_ward_stock(
-    IN p_nurse_user_id INT,
-    IN p_medicine_id INT,
-    IN p_item_name VARCHAR(100),
-    IN p_quantity INT
-)
-BEGIN
-    DECLARE v_staff_id INT;
-    DECLARE v_ward_id INT;
-
-    SELECT staff_id INTO v_staff_id FROM Staff WHERE user_id = p_nurse_user_id;
-    IF v_staff_id IS NULL THEN SET v_staff_id = 3; END IF;
-
-    SELECT ward_id INTO v_ward_id FROM Wards WHERE nurse_in_charge_id = v_staff_id LIMIT 1;
-    IF v_ward_id IS NULL THEN SELECT ward_id INTO v_ward_id FROM Wards ORDER BY ward_id ASC LIMIT 1; END IF;
-
-    INSERT INTO Ward_Inventory_Requests (ward_id, nurse_id, medicine_id, item_name, quantity, status, created_at)
-    VALUES (v_ward_id, v_staff_id, p_medicine_id, p_item_name, p_quantity, 'Requested', NOW());
-
-    SELECT request_id, item_name, quantity, status FROM Ward_Inventory_Requests WHERE request_id = LAST_INSERT_ID();
-END //
-
-DELIMITER ;
 
 
 DELIMITER //
