@@ -22,11 +22,21 @@ def fetch_medicine(medicine_id: int) -> Dict[str, Any]:
         return med
 
 def create_medicine(data: MedicineCreate) -> Dict[str, Any]:
+    if data.expiry_date and data.expiry_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Batch Expiry Date cannot be a past date. Please provide a valid future expiry date."
+        )
     with get_db() as conn:
         med_id = repo.add_medicine(conn, data.model_dump())
         return repo.get_medicine_by_id(conn, med_id)
 
 def modify_medicine(medicine_id: int, data: MedicineUpdate) -> Dict[str, Any]:
+    if data.expiry_date and data.expiry_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Batch Expiry Date cannot be a past date. Please provide a valid future expiry date."
+        )
     with get_db() as conn:
         existing = repo.get_medicine_by_id(conn, medicine_id)
         if not existing:
@@ -40,6 +50,11 @@ def modify_medicine(medicine_id: int, data: MedicineUpdate) -> Dict[str, Any]:
         return repo.get_medicine_by_id(conn, medicine_id)
 
 def record_stock_receipt(data: StockReceiptCreate) -> Dict[str, Any]:
+    if data.expiry_date and data.expiry_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Batch Expiry Date cannot be a past date. Please provide a valid future expiry date."
+        )
     with get_db() as conn:
         med = repo.get_medicine_by_id(conn, data.medicine_id)
         if not med:

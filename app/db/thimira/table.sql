@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS Medicines (
     unit_price     DECIMAL(10,2) NOT NULL COMMENT 'Unit price in Rupees (Rs.)',
     stock_qty      INT NOT NULL DEFAULT 0,
     reorder_level  INT NOT NULL DEFAULT 20,
-    expiry_date    DATE NOT NULL,
+    expiry_date    DATE NULL,
     is_active      BOOLEAN NOT NULL DEFAULT TRUE,
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS Dispensations (
 
 -- ------------------------------------------------------------------------------
 -- 4. Purchase_Orders Table (Restock Orders)
--- Stores official procurement requisitions with minimum 1-day lead time.
+-- Stores official procurement requisitions with minimum 3-day lead time.
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Purchase_Orders (
     order_id               INT AUTO_INCREMENT PRIMARY KEY,

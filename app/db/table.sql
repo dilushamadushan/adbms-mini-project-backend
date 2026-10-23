@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS Medicines (
     unit_price     DECIMAL(10,2) NOT NULL,
     stock_qty      INT NOT NULL DEFAULT 0,
     reorder_level  INT NOT NULL DEFAULT 20,
-    expiry_date    DATE NOT NULL,
+    expiry_date    DATE NULL,
     is_active      BOOLEAN NOT NULL DEFAULT TRUE,
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

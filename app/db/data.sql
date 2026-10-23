@@ -105,15 +105,15 @@ INSERT INTO Discharges (admission_id, discharge_authorized_by, discharge_authori
 (4, 2, '2026-10-17 10:00:00', 'Patient is stable and approved for discharge by the doctor.', 'Authorized', NULL, NULL);
 
 INSERT INTO Medicines (medicine_id, med_name, generic_name, unit_price, stock_qty, reorder_level, expiry_date, is_active) VALUES
-    (1,  'Amlodipine 5mg',          'Amlodipine Besylate',       12.50, 150, 30, '2027-06-30', TRUE),
+    (1,  'Amlodipine 5mg',          'Amlodipine Besylate',       12.00, 150, 30, '2027-06-30', TRUE),
     (2,  'Atorvastatin 10mg',       'Atorvastatin Calcium',      22.00,  85, 25, '2027-04-15', TRUE),
     (3,  'Cetirizine 10mg',         'Cetirizine Hydrochloride',   8.00, 200, 40, '2026-12-31', TRUE),
     (4,  'Fluticasone Nasal Spray', 'Fluticasone Propionate',    45.00,  15, 20, '2026-11-30', TRUE),
     (5,  'Amoxicillin 500mg',       'Amoxicillin Trihydrate',    15.00, 120, 30, '2027-08-20', TRUE),
     (6,  'Paracetamol 500mg',       'Acetaminophen',              5.00, 400, 50, '2028-01-15', TRUE),
     (7,  'Metformin 500mg',         'Metformin Hydrochloride',   10.00,  18, 25, '2027-03-10', TRUE),
-    (8,  'Omeprazole 20mg',         'Omeprazole Magnesium',      18.50,  90, 20, '2027-09-05', TRUE),
-    (9,  'Ibuprofen 400mg',         'Ibuprofen',                  7.50, 250, 35, '2027-10-12', TRUE),
+    (8,  'Omeprazole 20mg',         'Omeprazole Magnesium',      18.00,  90, 20, '2027-09-05', TRUE),
+    (9,  'Ibuprofen 400mg',         'Ibuprofen',                  7.00, 250, 35, '2027-10-12', TRUE),
     (10, 'Azithromycin 250mg',      'Azithromycin Dihydrate',    35.00,  60, 15, '2026-10-25', TRUE);
 
 INSERT INTO Stock_Receipts (receipt_id, medicine_id, quantity, expiry_date, received_by, received_at) VALUES
