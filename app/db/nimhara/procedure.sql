@@ -701,8 +701,10 @@ CREATE PROCEDURE sp_complete_patient_discharge(
 )
 BEGIN
     DECLARE v_bed_id INT;
+    DECLARE v_patient_id INT;
     DECLARE v_discharge_id INT;
     DECLARE v_current_status VARCHAR(50);
+    DECLARE v_pending_orders_count INT DEFAULT 0;
 
     SELECT discharge_id, status, admission_id
     INTO v_discharge_id, v_current_status, p_admission_id
@@ -717,7 +719,26 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Patient has already been discharged.';
     END IF;
 
-    SELECT bed_id INTO v_bed_id FROM Admissions WHERE admission_id = p_admission_id;
+    SELECT bed_id, patient_id INTO v_bed_id, v_patient_id 
+    FROM Admissions 
+    WHERE admission_id = p_admission_id;
+
+    SELECT COUNT(*) INTO v_pending_orders_count
+    FROM Doctor_Orders
+    WHERE patient_id = v_patient_id AND status != 'Done';
+
+    IF v_pending_orders_count > 0 THEN
+        INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+        VALUES (
+            'Pending Doctor Orders Alert',
+            CONCAT('Cannot complete bed release for Patient ID #', v_patient_id, '. Outstanding Doctor Orders must be marked Done first.'),
+            'DISCHARGE_ORDERS_PENDING',
+            'nurse',
+            JSON_OBJECT('admission_id', p_admission_id, 'patient_id', v_patient_id, 'pending_orders', v_pending_orders_count),
+            NOW()
+        );
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot release bed: Incomplete doctor orders exist. Mark all doctor orders as Done first.';
+    END IF;
 
     START TRANSACTION;
 
@@ -735,8 +756,7 @@ BEGIN
     END IF;
 
     UPDATE Admissions
-    SET status = 'Discharged',
-        bed_id = NULL
+    SET bed_id = NULL
     WHERE admission_id = p_admission_id;
 
     COMMIT;

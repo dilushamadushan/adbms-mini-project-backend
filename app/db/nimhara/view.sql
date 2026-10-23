@@ -162,6 +162,7 @@ SELECT
     ord.order_id,
     ord.patient_id,
     CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+    b.bed_id,
     b.bed_number,
     ord.doctor_id,
     CONCAT('Dr. ', doc.first_name, ' ', doc.last_name) AS doctor_name,
