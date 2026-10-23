@@ -35,6 +35,12 @@ class AdmissionCreate(BaseModel):
     gender: str = Field(pattern="^(Female|Male)$")
 
 
+class AdmissionGuardianUpdate(BaseModel):
+    guardian_name: str = Field(min_length=1, max_length=200)
+    guardian_relationship: str = Field(min_length=1, max_length=100)
+    guardian_contact: str = Field(min_length=1, max_length=20)
+
+
 class AdmissionBedAssignment(BaseModel):
     bed_id: int
 

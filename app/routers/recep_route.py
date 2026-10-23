@@ -8,6 +8,7 @@ from app.schema.recep_schema import (
     AdmissionActionResponse,
     AdmissionBedAssignment,
     AdmissionCreate,
+    AdmissionGuardianUpdate,
     AdmissionResponse,
     AvailableBed,
     BillPayment,
@@ -80,6 +81,26 @@ def admit_patient(
         admission.guardian_relationship,
         admission.guardian_contact,
         admission.gender,
+    )
+
+
+@router.patch(
+    "/admissions/{admission_id}/guardian",
+    response_model=AdmissionResponse,
+)
+def complete_admission_guardian(
+    admission_id: int,
+    guardian: AdmissionGuardianUpdate,
+    payload: dict = Depends(get_current_user_payload),
+):
+    user_id, role = _identity(payload)
+    return recep_service.complete_admission_guardian(
+        user_id,
+        role,
+        admission_id,
+        guardian.guardian_name,
+        guardian.guardian_relationship,
+        guardian.guardian_contact,
     )
 
 
