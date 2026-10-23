@@ -324,3 +324,31 @@ def get_ward_nurses():
         logger.exception("Failed to get ward nurses: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/ward-orders")
+def get_ward_doctor_orders():
+    try:
+        return nurse_service.get_ward_doctor_orders()
+    except Exception as e:
+        logger.exception("Failed to get ward doctor orders: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ward-mar")
+def get_ward_mar():
+    try:
+        return nurse_service.get_ward_mar()
+    except Exception as e:
+        logger.exception("Failed to get ward MAR: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ward-notes")
+def get_ward_nursing_notes():
+    try:
+        return nurse_service.get_ward_nursing_notes()
+    except Exception as e:
+        logger.exception("Failed to get ward nursing notes: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+

@@ -168,3 +168,19 @@ def get_ward_nurses() -> List[Dict[str, Any]]:
         return nurse_repo.get_ward_nurses(conn)
 
 
+def get_ward_doctor_orders() -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        return nurse_repo.get_ward_doctor_orders(conn)
+
+
+def get_ward_mar() -> Dict[str, Any]:
+    with get_db() as conn:
+        return nurse_repo.get_ward_mar(conn)
+
+
+def get_ward_nursing_notes() -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        return nurse_repo.get_ward_nursing_notes(conn)
+
+
+
