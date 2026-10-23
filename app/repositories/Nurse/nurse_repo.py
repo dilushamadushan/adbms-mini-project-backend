@@ -366,3 +366,4 @@ def get_ward_nurses(conn: MySQLConnection) -> List[Dict[str, Any]]:
         return results
     finally:
         cursor.close()
+

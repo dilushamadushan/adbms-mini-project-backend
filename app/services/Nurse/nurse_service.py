@@ -167,3 +167,4 @@ def get_ward_nurses() -> List[Dict[str, Any]]:
     with get_db() as conn:
         return nurse_repo.get_ward_nurses(conn)
 
+

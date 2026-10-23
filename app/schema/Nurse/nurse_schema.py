@@ -293,3 +293,5 @@ class NurseStaffItem(BaseModel):
     username: str
     specialty: Optional[str] = None
 
+
+
