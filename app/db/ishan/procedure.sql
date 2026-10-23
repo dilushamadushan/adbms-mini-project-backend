@@ -315,10 +315,29 @@ DROP PROCEDURE IF EXISTS `request_discharge`;
 DELIMITER $$
 CREATE PROCEDURE `request_discharge`(
   IN p_admission_id INT,
-  IN p_doctor_id INT,
+  IN p_user_id INT,
   IN p_notes TEXT
 )
 BEGIN
+  DECLARE v_doctor_staff_id INT DEFAULT NULL;
+
+  -- Find the doctor Staff ID from the logged-in User ID
+  SELECT s.staff_id
+  INTO v_doctor_staff_id
+  FROM Users AS u
+  INNER JOIN Staff AS s
+    ON s.user_id = u.user_id
+  WHERE u.user_id = p_user_id
+    AND LOWER(u.role) = 'doctor'
+    AND u.is_active = TRUE
+  LIMIT 1;
+
+  -- Stop if the user is not an active doctor
+  IF v_doctor_staff_id IS NULL THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Active doctor user not found';
+  END IF;
+
   -- 1. Check if admission is valid and not already discharged
   IF NOT EXISTS (SELECT 1 FROM `admissions`
                  WHERE admission_id = p_admission_id AND status <> 'Discharged') THEN
@@ -337,11 +356,11 @@ BEGIN
   )
   VALUES (
     p_admission_id, 
-    p_doctor_id, 
+    v_doctor_staff_id,
     p_notes,
-    'Discharged',     
-    p_doctor_id,      
-    CURRENT_TIMESTAMP 
+    'Authorized',
+    p_user_id,
+    NULL
   );
 END$$
 DELIMITER ;
