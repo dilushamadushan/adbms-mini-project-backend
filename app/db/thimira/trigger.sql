@@ -1,7 +1,4 @@
--- ==============================================================================
--- Pharmacy Management Triggers (Thimira)
--- Module: Medicine Inventory & Stock Alerts
--- ==============================================================================
+
 
 USE hms;
 
@@ -17,14 +14,12 @@ CREATE TRIGGER trg_after_stock_receipt_insert
 AFTER INSERT ON Stock_Receipts
 FOR EACH ROW
 BEGIN
-    -- Increase stock quantity and update expiry date if earlier
+    -- Increase stock quantity, update expiry date to the newly received batch, and reactivate
     UPDATE Medicines
     SET 
         stock_qty = stock_qty + NEW.quantity,
-        expiry_date = CASE 
-            WHEN expiry_date IS NULL OR NEW.expiry_date < expiry_date THEN NEW.expiry_date
-            ELSE expiry_date
-        END
+        expiry_date = COALESCE(NEW.expiry_date, expiry_date),
+        is_active = TRUE
     WHERE medicine_id = NEW.medicine_id;
 
     -- Log to audit
@@ -122,7 +117,7 @@ DELIMITER ;
 
 -- ------------------------------------------------------------------------------
 -- 4. Trigger: Restock Lead Time Validation
--- Restock order must have expected delivery date at least 3 business days in the future.
+-- Restock order must have expected delivery date at least 1 day in the future.
 -- ------------------------------------------------------------------------------
 DELIMITER //
 
@@ -132,11 +127,33 @@ CREATE TRIGGER trg_check_po_delivery_lead_time
 BEFORE INSERT ON Purchase_Orders
 FOR EACH ROW
 BEGIN
-    IF NEW.expected_delivery_date < DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN
+    IF NEW.expected_delivery_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Restock lead time must be at least 3 business days. Expected delivery date must be at least 3 days in advance.';
+        SET MESSAGE_TEXT = 'Restock lead time must be at least 1 day. Expected delivery date must be at least 1 day in advance.';
     END IF;
 END //
 
 DELIMITER ;
 
+
+-- ------------------------------------------------------------------------------
+-- 5. Trigger: Enforce 1-Day Transit Before Marking Order as RECEIVED
+-- Prevents purchase orders from being marked as RECEIVED before 1 day has passed.
+-- ------------------------------------------------------------------------------
+DELIMITER //
+
+DROP TRIGGER IF EXISTS trg_check_po_receive_lead_time //
+
+CREATE TRIGGER trg_check_po_receive_lead_time
+BEFORE UPDATE ON Purchase_Orders
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'RECEIVED' AND OLD.status != 'RECEIVED' THEN
+        IF DATEDIFF(CURDATE(), DATE(OLD.order_date)) < 1 AND CURDATE() < OLD.expected_delivery_date THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot confirm stock receipt before 1 day from the order date. The order is still in transit from the supplier.';
+        END IF;
+    END IF;
+END //
+
+DELIMITER ;

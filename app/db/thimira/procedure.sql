@@ -1,7 +1,4 @@
--- ==============================================================================
--- Pharmacy Management Stored Procedures (Thimira)
--- Module: Inventory Management, Alerts, and Reporting
--- ==============================================================================
+
 
 USE hms;
 
@@ -259,10 +256,12 @@ BEGIN
         po.notes,
         po.pharmacist_id,
         CONCAT(s.first_name, ' ', s.last_name) AS pharmacist_name,
-        COUNT(poi.item_id) AS total_items
+        COUNT(poi.item_id) AS total_items,
+        GROUP_CONCAT(DISTINCT CONCAT(m.med_name, ' (', poi.requested_quantity, ' units)') SEPARATOR ', ') AS ordered_medicines
     FROM Purchase_Orders po
     LEFT JOIN Staff s ON po.pharmacist_id = s.staff_id
     LEFT JOIN Purchase_Order_Items poi ON po.order_id = poi.order_id
+    LEFT JOIN Medicines m ON poi.medicine_id = m.medicine_id
     GROUP BY po.order_id, po.order_number, po.supplier_name, po.order_date, 
              po.expected_delivery_date, po.total_cost, po.status, po.notes, 
              po.pharmacist_id, s.first_name, s.last_name
@@ -284,6 +283,21 @@ CREATE PROCEDURE sp_update_purchase_order_status(
     IN p_status VARCHAR(30)
 )
 BEGIN
+    DECLARE v_order_date DATETIME;
+    DECLARE v_expected_date DATE;
+
+    IF p_status = 'RECEIVED' THEN
+        SELECT order_date, expected_delivery_date 
+        INTO v_order_date, v_expected_date
+        FROM Purchase_Orders
+        WHERE order_id = p_order_id;
+
+        IF DATEDIFF(CURDATE(), DATE(v_order_date)) < 1 AND CURDATE() < v_expected_date THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot confirm stock receipt before 1 day from the order date. The order is still in transit from the supplier.';
+        END IF;
+    END IF;
+
     UPDATE Purchase_Orders
     SET status = p_status
     WHERE order_id = p_order_id;
@@ -312,6 +326,8 @@ BEGIN
     DECLARE v_qty INT;
     DECLARE v_order_num VARCHAR(50);
     DECLARE v_cur_status VARCHAR(30);
+    DECLARE v_order_date DATETIME;
+    DECLARE v_expected_date DATE;
 
     -- Cursor to iterate through all medicines in the order
     DECLARE cur_items CURSOR FOR 
@@ -320,14 +336,21 @@ BEGIN
         WHERE order_id = p_order_id;
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
 
-    -- Check current order status
-    SELECT order_number, status INTO v_order_num, v_cur_status
+    -- Check current order status and transit lead time
+    SELECT order_number, status, order_date, expected_delivery_date 
+    INTO v_order_num, v_cur_status, v_order_date, v_expected_date
     FROM Purchase_Orders
     WHERE order_id = p_order_id;
 
     IF v_cur_status = 'RECEIVED' THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'This purchase order has already been received and restocked.';
+    END IF;
+
+    -- Enforce 1-day delivery transit before receiving
+    IF DATEDIFF(CURDATE(), DATE(v_order_date)) < 1 AND CURDATE() < v_expected_date THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot confirm stock receipt before 1 day from the order date. The order is still in transit from the supplier.';
     END IF;
 
     SET p_batch_expiry_date = COALESCE(p_batch_expiry_date, DATE_ADD(CURDATE(), INTERVAL 1 YEAR));
@@ -365,5 +388,40 @@ BEGIN
 END //
 
 DELIMITER ;
+
+
+-- ------------------------------------------------------------------------------
+-- 11. Procedure: Get Stock Receipts History (Restock Audit Log)
+-- Returns full audit history of stock batches received into inventory.
+-- ------------------------------------------------------------------------------
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_stock_receipts_history //
+
+CREATE PROCEDURE sp_get_stock_receipts_history(
+    IN p_limit INT
+)
+BEGIN
+    SET p_limit = COALESCE(p_limit, 50);
+
+    SELECT 
+        sr.receipt_id,
+        sr.medicine_id,
+        m.med_name,
+        m.generic_name,
+        sr.quantity,
+        sr.expiry_date,
+        sr.received_by,
+        CONCAT(s.first_name, ' ', s.last_name) AS received_by_name,
+        sr.received_at
+    FROM Stock_Receipts sr
+    JOIN Medicines m ON sr.medicine_id = m.medicine_id
+    LEFT JOIN Staff s ON sr.received_by = s.staff_id
+    ORDER BY sr.received_at DESC
+    LIMIT p_limit;
+END //
+
+DELIMITER ;
+
 
 
