@@ -122,7 +122,7 @@ DELIMITER ;
 
 -- ------------------------------------------------------------------------------
 -- 4. Trigger: Restock Lead Time Validation
--- Restock order must have expected delivery date at least 1 day in the future.
+-- Restock order must have expected delivery date at least 3 business days in the future.
 -- ------------------------------------------------------------------------------
 DELIMITER //
 
@@ -132,9 +132,9 @@ CREATE TRIGGER trg_check_po_delivery_lead_time
 BEFORE INSERT ON Purchase_Orders
 FOR EACH ROW
 BEGIN
-    IF NEW.expected_delivery_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN
+    IF NEW.expected_delivery_date < DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Restock lead time must be at least 1 day. Expected delivery date cannot be today or in the past.';
+        SET MESSAGE_TEXT = 'Restock lead time must be at least 3 business days. Expected delivery date must be at least 3 days in advance.';
     END IF;
 END //
 

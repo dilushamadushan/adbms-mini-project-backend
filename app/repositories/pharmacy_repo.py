@@ -102,23 +102,33 @@ def update_medicine(conn: MySQLConnection, medicine_id: int, updates: Dict[str, 
 def receive_stock(conn: MySQLConnection, medicine_id: int, quantity: int, expiry_date: date, received_by: int) -> int:
     cursor = conn.cursor()
     try:
-        # Calling procedure if available, else standard insert
+        # Check pre-stock to detect if trigger trg_after_stock_receipt_insert handles increment
+        cursor.execute("SELECT stock_qty FROM Medicines WHERE medicine_id = %s", (medicine_id,))
+        med_row = cursor.fetchone()
+        pre_stock = med_row[0] if med_row else 0
+
+        # Insert into Stock_Receipts (fires trg_after_stock_receipt_insert trigger to auto-increment stock)
         cursor.execute("""
             INSERT INTO Stock_Receipts (medicine_id, quantity, expiry_date, received_by, received_at)
             VALUES (%s, %s, %s, %s, NOW())
         """, (medicine_id, quantity, expiry_date, received_by))
         receipt_id = cursor.lastrowid
 
-        # Update medicine stock & expiry date
-        cursor.execute("""
-            UPDATE Medicines
-            SET stock_qty = stock_qty + %s,
-                expiry_date = CASE 
-                    WHEN expiry_date IS NULL OR %s < expiry_date THEN %s
-                    ELSE expiry_date
-                END
-            WHERE medicine_id = %s
-        """, (quantity, expiry_date, expiry_date, medicine_id))
+        # Verify whether the trigger incremented stock; if not, apply manual fallback update
+        cursor.execute("SELECT stock_qty FROM Medicines WHERE medicine_id = %s", (medicine_id,))
+        post_stock_row = cursor.fetchone()
+        post_stock = post_stock_row[0] if post_stock_row else pre_stock
+
+        if post_stock == pre_stock:
+            cursor.execute("""
+                UPDATE Medicines
+                SET stock_qty = stock_qty + %s,
+                    expiry_date = CASE 
+                        WHEN expiry_date IS NULL OR %s < expiry_date THEN %s
+                        ELSE expiry_date
+                    END
+                WHERE medicine_id = %s
+            """, (quantity, expiry_date, expiry_date, medicine_id))
 
         return receipt_id
     finally:
@@ -228,9 +238,10 @@ def create_purchase_order(
 ) -> int:
     cursor = conn.cursor(dictionary=True)
     try:
-        # Validate lead time: minimum 1 day in advance
-        if expected_delivery_date <= date.today():
-            raise ValueError("Restock lead time must be at least 1 day in advance.")
+        # Validate lead time: minimum 3 business days in advance
+        from datetime import timedelta
+        if expected_delivery_date < date.today() + timedelta(days=3):
+            raise ValueError("Restock lead time must be at least 3 business days in advance.")
 
         # Calculate totals
         total_cost = Decimal("0.00")

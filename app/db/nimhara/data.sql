@@ -58,7 +58,11 @@ INSERT IGNORE INTO Intake_Output_Logs (io_id, patient_id, recorded_by, io_type, 
     (4, 1, 3, 'Intake', 'Oral', 200, 'Soup with lunch', '2026-10-21 12:30:00'),
     (5, 1, 3, 'Output', 'Urine', 300, 'Clear', '2026-10-21 13:00:00');
 
-INSERT IGNORE INTO Shift_Handovers (handover_id, ward_id, outgoing_nurse_id, incoming_nurse_id, shift_type, handover_date, summary_notes, critical_patients_count, pending_tasks_count, status, accepted_at, created_at) VALUES
-    (1, 1, 3, NULL, 'Day', '2026-10-21', 
-     'Ward Census: 2 patients in beds CCW-101 (Jane Doe) and CCW-104 (Bob Smith). Jane Doe is stable on telemetry. Bob Smith has doctor authorization for discharge pending nurse completion.', 
-     0, 1, 'Pending_Acceptance', NULL, '2026-10-21 14:45:00');
+INSERT IGNORE INTO Users (user_id, username, email, password_hash, role, is_active)
+VALUES (10, 'nurse.maria', 'maria.silva@hospital.com', '07429ac3dabe393512f2633b9514473ec7fc452dd202eb7735e60b900d273fd3', 'nurse', 1)
+ON DUPLICATE KEY UPDATE username=VALUES(username);
+
+INSERT IGNORE INTO Staff (staff_id, user_id, dept_id, first_name, last_name, specialty)
+VALUES (6, 10, 1, 'Maria', 'Silva', 'Critical Care Nursing')
+ON DUPLICATE KEY UPDATE first_name=VALUES(first_name);
+

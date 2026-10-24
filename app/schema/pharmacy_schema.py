@@ -11,11 +11,11 @@ class MedicineBase(BaseModel):
     generic_name: Optional[str] = Field(None, max_length=100, description="Generic pharmacological name")
     unit_price: Decimal = Field(..., gt=0, description="Selling unit price")
     reorder_level: int = Field(20, ge=0, description="Threshold for low-stock alert")
-    expiry_date: date = Field(..., description="Batch expiry date")
+    expiry_date: Optional[date] = Field(None, description="Batch expiry date")
     is_active: bool = Field(True, description="Active status in inventory")
 
 class MedicineCreate(MedicineBase):
-    stock_qty: int = Field(0, ge=0, description="Initial stock quantity")
+    stock_qty: Optional[int] = Field(0, ge=0, description="Initial stock quantity")
 
 class MedicineUpdate(BaseModel):
     med_name: Optional[str] = Field(None, min_length=2, max_length=100)
@@ -109,7 +109,7 @@ class PurchaseOrderItemCreate(BaseModel):
 
 class PurchaseOrderCreate(BaseModel):
     supplier_name: Optional[str] = "State Pharmaceuticals Corporation"
-    expected_delivery_date: date = Field(..., description="Lead time must be at least 1 day")
+    expected_delivery_date: date = Field(..., description="Lead time must be at least 3 business days")
     notes: Optional[str] = None
     items: List[PurchaseOrderItemCreate]
 

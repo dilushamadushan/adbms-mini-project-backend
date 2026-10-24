@@ -22,12 +22,9 @@ from app.schema.Nurse.nurse_schema import (
     NursingNoteCreate,
     IntakeOutputSummaryResponse,
     IntakeOutputCreate,
-    ShiftHandoverItem,
-    ShiftHandoverCreate,
-    WardInventoryItem,
-    WardInventoryCreate,
     AssignBedRequest,
     UnassignedAdmissionItem,
+    NurseStaffItem,
 )
 from app.services.Nurse import nurse_service
 
@@ -319,67 +316,39 @@ def log_intake_output(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/handover/current", response_model=List[ShiftHandoverItem])
-def get_current_shift_handover(nurse_user_id: int = Depends(_get_current_nurse_id)):
+@router.get("/ward-nurses", response_model=List[NurseStaffItem])
+def get_ward_nurses():
     try:
-        return nurse_service.get_current_shift_handover(nurse_user_id)
+        return nurse_service.get_ward_nurses()
     except Exception as e:
-        logger.exception("Failed to get shift handover: %s", e)
+        logger.exception("Failed to get ward nurses: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post(
-    "/handover/create",
-    response_model=dict,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_shift_handover(
-    payload: ShiftHandoverCreate,
-    nurse_user_id: int = Depends(_get_current_nurse_id),
-):
+@router.get("/ward-orders")
+def get_ward_doctor_orders():
     try:
-        return nurse_service.create_shift_handover(
-            nurse_user_id, payload.shift_type, payload.summary_notes
-        )
+        return nurse_service.get_ward_doctor_orders()
     except Exception as e:
-        logger.exception("Failed to create shift handover: %s", e)
+        logger.exception("Failed to get ward doctor orders: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/handover/{handover_id}/accept")
-def accept_shift_handover(
-    handover_id: int,
-    nurse_user_id: int = Depends(_get_current_nurse_id),
-):
+@router.get("/ward-mar")
+def get_ward_mar():
     try:
-        return nurse_service.accept_shift_handover(handover_id, nurse_user_id)
+        return nurse_service.get_ward_mar()
     except Exception as e:
-        logger.exception("Failed to accept shift handover: %s", e)
+        logger.exception("Failed to get ward MAR: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/inventory/requests", response_model=List[WardInventoryItem])
-def get_ward_inventory_requests(nurse_user_id: int = Depends(_get_current_nurse_id)):
+@router.get("/ward-notes")
+def get_ward_nursing_notes():
     try:
-        return nurse_service.get_ward_inventory_requests(nurse_user_id)
+        return nurse_service.get_ward_nursing_notes()
     except Exception as e:
-        logger.exception("Failed to get ward inventory requests: %s", e)
+        logger.exception("Failed to get ward nursing notes: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post(
-    "/inventory/request",
-    response_model=dict,
-    status_code=status.HTTP_201_CREATED,
-)
-def request_ward_stock(
-    payload: WardInventoryCreate,
-    nurse_user_id: int = Depends(_get_current_nurse_id),
-):
-    try:
-        return nurse_service.request_ward_stock(
-            nurse_user_id, payload.medicine_id, payload.item_name, payload.quantity
-        )
-    except Exception as e:
-        logger.exception("Failed to request ward stock: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))

@@ -162,6 +162,7 @@ SELECT
     ord.order_id,
     ord.patient_id,
     CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+    b.bed_id,
     b.bed_number,
     ord.doctor_id,
     CONCAT('Dr. ', doc.first_name, ' ', doc.last_name) AS doctor_name,
@@ -181,25 +182,3 @@ LEFT JOIN Beds b ON adm.bed_id = b.bed_id
 INNER JOIN Staff doc ON ord.doctor_id = doc.staff_id
 LEFT JOIN Staff ack_nurse ON ord.acknowledged_by = ack_nurse.staff_id;
 
-
-CREATE OR REPLACE VIEW vw_nurse_shift_handovers AS
-SELECT 
-    sh.handover_id,
-    sh.ward_id,
-    w.ward_name,
-    sh.outgoing_nurse_id,
-    CONCAT(out_nurse.first_name, ' ', out_nurse.last_name) AS outgoing_nurse_name,
-    sh.incoming_nurse_id,
-    CONCAT(in_nurse.first_name, ' ', in_nurse.last_name) AS incoming_nurse_name,
-    sh.shift_type,
-    sh.handover_date,
-    sh.summary_notes,
-    sh.critical_patients_count,
-    sh.pending_tasks_count,
-    sh.status,
-    sh.accepted_at,
-    sh.created_at
-FROM Shift_Handovers sh
-INNER JOIN Wards w ON sh.ward_id = w.ward_id
-INNER JOIN Staff out_nurse ON sh.outgoing_nurse_id = out_nurse.staff_id
-LEFT JOIN Staff in_nurse ON sh.incoming_nurse_id = in_nurse.staff_id;

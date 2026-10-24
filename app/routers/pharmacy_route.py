@@ -83,7 +83,7 @@ def create_restock_order(
     payload: PurchaseOrderCreate,
     pharmacist_id: int = Query(5, description="Staff ID placing the order")
 ):
-    """Create a new official Restock Purchase Order (enforces min 1 day lead time)."""
+    """Create a new official Restock Purchase Order (enforces min 3 business days lead time)."""
     return service.create_order(payload, pharmacist_id=pharmacist_id)
 
 @router.get("/orders", response_model=List[PurchaseOrderResponse])
