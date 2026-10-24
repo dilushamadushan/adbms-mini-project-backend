@@ -190,6 +190,33 @@ def create_admission_request(
         cursor.close()
 
 
+def request_discharge(
+    conn: MySQLConnection,
+    admission_id: int,
+    doctor_id: int,
+    notes: str,
+) -> None:
+    cursor = conn.cursor()
+    try:
+        cursor.callproc("request_discharge", (admission_id, doctor_id, notes))
+        conn.commit()
+    finally:
+        cursor.close()
+
+
+def complete_appointment(
+    conn: MySQLConnection,
+    appointment_id: int,
+    doctor_id: int,
+) -> None:
+    cursor = conn.cursor()
+    try:
+        cursor.callproc("complete_appointment", (appointment_id, doctor_id))
+        conn.commit()
+    finally:
+        cursor.close()
+
+
 def get_active_admission_by_patient(
     conn: MySQLConnection, patient_id: int
 ) -> dict | None:

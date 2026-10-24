@@ -10,12 +10,30 @@ from app.schema.Docter.docter_schema import (
     AdmissionStatusResponse,
     CreateAdmissionRequest,
     AdmissionRequestResponse,
+    DischargeRequest,
+    DischargeRequestResponse,
+    CompleteAppointmentRequest,
+    CompleteAppointmentResponse,
 )
 from app.services.Docter import docter_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/doctor", tags=["Doctor"])
+
+
+@router.post("/appointments/complete", response_model=CompleteAppointmentResponse)
+def complete_appointment(payload: CompleteAppointmentRequest):
+    try:
+        return docter_service.complete_appointment(
+            payload.appointment_id,
+            payload.doctor_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to complete appointment: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to complete appointment")
 
 
 
@@ -147,6 +165,21 @@ def create_admission_request(payload: CreateAdmissionRequest):
     except Exception as e:
         logger.exception("Failed to create admission request: %s", e)
         raise HTTPException(status_code=500, detail="Failed to create admission request")
+
+
+@router.post("/discharge", response_model=DischargeRequestResponse)
+def request_discharge(payload: DischargeRequest):
+    try:
+        return docter_service.request_discharge(
+            payload.admission_id,
+            payload.doctor_id,
+            payload.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to request discharge: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to request discharge")
 
 
 @router.get("/admission-status/{patient_id}", response_model=AdmissionStatusResponse)
