@@ -1,28 +1,45 @@
 
 
--- get today only scheduled appointments count
+-- get today's total appointments for a doctor using Users.user_id
 
 DELIMITER //
 
 DROP FUNCTION IF EXISTS Get_Total_Appointment_Count_According_To_Doctor //
 
 CREATE FUNCTION Get_Total_Appointment_Count_According_To_Doctor(
-    doc_id INT
+    user_id_input INT
 )
 RETURNS INT
 NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
-    DECLARE total INT;
+    DECLARE doctor_staff_id INT DEFAULT NULL;
+    DECLARE total INT DEFAULT 0;
 
+    -- Find the Staff ID related to the logged-in User ID
+    SELECT s.staff_id
+    INTO doctor_staff_id
+    FROM Users u
+    INNER JOIN Staff s
+        ON s.user_id = u.user_id
+    WHERE u.user_id = user_id_input
+      AND LOWER(u.role) = 'doctor'
+      AND u.is_active = TRUE
+    LIMIT 1;
+
+    -- Return zero when the user is not an active doctor
+    IF doctor_staff_id IS NULL THEN
+        RETURN 0;
+    END IF;
+
+    -- Count today's appointments for the related doctor
     SELECT COUNT(*)
     INTO total
-    FROM appointments
-    WHERE doctor_id = doc_id
-      AND DATE(apt_date) = CURDATE()
-      AND status = 'Scheduled';
+    FROM Appointments
+    WHERE doctor_id = doctor_staff_id
+      AND DATE(apt_date) = CURDATE();
 
-    RETURN COALESCE(total, 0);
+    RETURN total;
 END //
 
 DELIMITER ;
@@ -78,4 +95,3 @@ BEGIN
 END //
 
 DELIMITER ;
-
