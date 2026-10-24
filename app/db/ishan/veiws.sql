@@ -16,6 +16,16 @@ SELECT admission_id, patient_id, ward_id, bed_id, admitted_doctor_id, admitted_b
 FROM admissions;
 
 
+-- Medicine list for the doctor's dropdown.
+-- Returns the id, name and generic name of every medicine,
+-- sorted by name.
+-- =====================================================
+CREATE OR REPLACE VIEW `vw_doctor_medicine_list` AS
+SELECT medicine_id, med_name, generic_name
+FROM medicines
+ORDER BY med_name;
+
+
 
 
 

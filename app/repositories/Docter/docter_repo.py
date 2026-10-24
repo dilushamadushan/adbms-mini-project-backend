@@ -1,10 +1,112 @@
+import json
 from mysql.connector.connection import MySQLConnection
 
-#only run if id is the docter id
-def get_appointments_by_doctor(conn: MySQLConnection, doctor_id: int) -> list:
+def get_doctor_medicine_list(conn: MySQLConnection) -> list[dict]:
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.callproc("GetAppointmentsByDoctor", (doctor_id,))
+        cursor.execute(
+            """
+            SELECT medicine_id, med_name, generic_name
+            FROM vw_doctor_medicine_list
+            ORDER BY med_name
+            """
+        )
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+
+
+def create_prescription(
+    conn: MySQLConnection,
+    patient_id: int,
+    apt_id: int,
+    doctor_id: int,
+    diagnosis: str,
+    clinical_notes: str | None,
+    medicines: list[dict],
+) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc(
+            "sp_create_prescription",
+            (
+                patient_id,
+                apt_id,
+                doctor_id,
+                diagnosis,
+                clinical_notes,
+                json.dumps(medicines),
+            ),
+        )
+        for result in cursor.stored_results():
+            row = result.fetchone()
+            if row and row.get("record_id") is not None:
+                return int(row["record_id"])
+        raise ValueError("Prescription procedure did not return a record ID")
+    finally:
+        cursor.close()
+
+
+def create_admitted_prescription(
+    conn: MySQLConnection,
+    patient_id: int,
+    apt_id: int,
+    doctor_id: int,
+    diagnosis: str,
+    clinical_notes: str | None,
+    medicines: list[dict],
+    nurse_orders: list[dict],
+) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc(
+            "sp_create_admitted_prescription",
+            (
+                patient_id,
+                apt_id,
+                doctor_id,
+                diagnosis,
+                clinical_notes,
+                json.dumps(medicines),
+                json.dumps(nurse_orders),
+            ),
+        )
+        for result in cursor.stored_results():
+            row = result.fetchone()
+            if row and row.get("record_id") is not None:
+                return int(row["record_id"])
+        raise ValueError("Admitted prescription procedure did not return a record ID")
+    finally:
+        cursor.close()
+
+def _get_staff_id_for_user(conn: MySQLConnection, user_id: int) -> int | None:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT s.staff_id
+            FROM Users u
+            INNER JOIN Staff s ON s.user_id = u.user_id
+            WHERE u.user_id = %s
+              AND LOWER(u.role) = 'doctor'
+              AND u.is_active = TRUE
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        return int(row["staff_id"]) if row else None
+    finally:
+        cursor.close()
+
+
+def get_appointments_by_doctor(conn: MySQLConnection, user_id: int) -> list:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        staff_id = _get_staff_id_for_user(conn, user_id)
+        if staff_id is None:
+            return []
+        cursor.callproc("GetAppointmentsByDoctor", (staff_id,))
         results = []
         for result in cursor.stored_results():
             results.extend(result.fetchall())
@@ -12,17 +114,8 @@ def get_appointments_by_doctor(conn: MySQLConnection, doctor_id: int) -> list:
     finally:
         cursor.close()
 
-#check the given id is docter id or not
-def doctor_exists(conn: MySQLConnection, doctor_id: int) -> bool:
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.callproc("CheckDoctorExists", (doctor_id,))
-        for result in cursor.stored_results():
-            row = result.fetchone()
-            return row is not None and row["doctor_count"] > 0
-        return False
-    finally:
-        cursor.close()
+def doctor_exists(conn: MySQLConnection, user_id: int) -> bool:
+    return _get_staff_id_for_user(conn, user_id) is not None
 
 
  #get the total number of appointment according to the doctor id
@@ -41,12 +134,15 @@ def get_appointment_count(conn: MySQLConnection, doctor_id: int) -> int:
 
 
 # get the total number of completed appointments for today according to the doctor id
-def get_completed_appointment_count(conn: MySQLConnection, doctor_id: int) -> int:
+def get_completed_appointment_count(conn: MySQLConnection, user_id: int) -> int:
     cursor = conn.cursor(dictionary=True)
     try:
+        staff_id = _get_staff_id_for_user(conn, user_id)
+        if staff_id is None:
+            return 0
         cursor.execute(
             "SELECT Get_Total_Appointment_Count_According_To_Doctor_complted(%s) AS completed_count",
-            (doctor_id,),
+            (staff_id,),
         )
         row = cursor.fetchone()
         return int(row["completed_count"] or 0)
@@ -55,12 +151,15 @@ def get_completed_appointment_count(conn: MySQLConnection, doctor_id: int) -> in
 
 
 # get the total number of patients by doctor id (scheduled and cancelled)
-def get_total_patients_count(conn: MySQLConnection, doctor_id: int) -> int:
+def get_total_patients_count(conn: MySQLConnection, user_id: int) -> int:
     cursor = conn.cursor(dictionary=True)
     try:
+        staff_id = _get_staff_id_for_user(conn, user_id)
+        if staff_id is None:
+            return 0
         cursor.execute(
             "SELECT get_Total_Patients_count_by_docter(%s) AS patients_count",
-            (doctor_id,),
+            (staff_id,),
         )
         row = cursor.fetchone()
         return int(row["patients_count"] or 0)
@@ -69,10 +168,13 @@ def get_total_patients_count(conn: MySQLConnection, doctor_id: int) -> int:
 
 
 # get appointment history of a doctor
-def get_appointment_history_by_doctor(conn: MySQLConnection, doctor_id: int) -> list:
+def get_appointment_history_by_doctor(conn: MySQLConnection, user_id: int) -> list:
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.callproc("GetAppointmentHistoryByDoctor", (doctor_id,))
+        staff_id = _get_staff_id_for_user(conn, user_id)
+        if staff_id is None:
+            return []
+        cursor.callproc("GetAppointmentHistoryByDoctor", (staff_id,))
         results = []
         for result in cursor.stored_results():
             results.extend(result.fetchall())
@@ -82,10 +184,13 @@ def get_appointment_history_by_doctor(conn: MySQLConnection, doctor_id: int) -> 
 
 
 # get upcoming appointments of a doctor
-def get_upcoming_appointments_by_doctor(conn: MySQLConnection, doctor_id: int) -> list:
+def get_upcoming_appointments_by_doctor(conn: MySQLConnection, user_id: int) -> list:
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.callproc("sp_get_upcoming_appointments_by_doctor", (doctor_id,))
+        staff_id = _get_staff_id_for_user(conn, user_id)
+        if staff_id is None:
+            return []
+        cursor.callproc("sp_get_upcoming_appointments_by_doctor", (staff_id,))
         results = []
         for result in cursor.stored_results():
             for row in result.fetchall():

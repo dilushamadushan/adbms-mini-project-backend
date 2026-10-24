@@ -3,6 +3,63 @@ import mysql.connector
 from app.core.database import get_db
 from app.repositories.Docter import docter_repo
 
+def get_doctor_medicine_list():
+    with get_db() as conn:
+        return docter_repo.get_doctor_medicine_list(conn)
+
+
+def create_prescription(
+    patient_id: int,
+    apt_id: int,
+    doctor_id: int,
+    diagnosis: str,
+    clinical_notes: str | None,
+    medicines: list[dict],
+):
+    try:
+        with get_db() as conn:
+            record_id = docter_repo.create_prescription(
+                conn,
+                patient_id,
+                apt_id,
+                doctor_id,
+                diagnosis,
+                clinical_notes,
+                medicines,
+            )
+            conn.commit()
+            return {
+                "message": "Prescription saved successfully",
+                "record_id": record_id,
+            }
+    except mysql.connector.Error as err:
+        if err.sqlstate == "45000":
+            raise ValueError(err.msg) from err
+        raise
+
+
+def create_admitted_prescription(
+    patient_id: int,
+    apt_id: int,
+    doctor_id: int,
+    diagnosis: str,
+    clinical_notes: str | None,
+    medicines: list[dict],
+    nurse_orders: list[dict],
+):
+    try:
+        with get_db() as conn:
+            record_id = docter_repo.create_admitted_prescription(
+                conn, patient_id, apt_id, doctor_id, diagnosis, clinical_notes,
+                medicines, nurse_orders,
+            )
+            conn.commit()
+            return {"message": "Admitted prescription saved successfully", "record_id": record_id}
+    except mysql.connector.Error as err:
+        if err.sqlstate == "45000":
+            raise ValueError(err.msg) from err
+        raise
+
 def list_appointments_by_doctor(doctor_id: int):
     with get_db() as conn:
         if not docter_repo.doctor_exists(conn, doctor_id):
