@@ -98,44 +98,10 @@ CREATE TABLE IF NOT EXISTS Intake_Output_Logs (
     patient_id INT NOT NULL,
     recorded_by INT NOT NULL,
     io_type ENUM('Intake', 'Output') NOT NULL,
-    category VARCHAR(50) NOT NULL, -- 'Oral', 'IV Fluids', 'Urine', 'Drain', 'NG Tube'
+    category VARCHAR(50) NOT NULL,
     volume_ml INT NOT NULL,
     notes VARCHAR(255) NULL,
     recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES Patients(patient_id),
     FOREIGN KEY (recorded_by) REFERENCES Staff(staff_id)
-);
-
-
-CREATE TABLE IF NOT EXISTS Shift_Handovers (
-    handover_id INT AUTO_INCREMENT PRIMARY KEY,
-    ward_id INT NOT NULL,
-    outgoing_nurse_id INT NOT NULL,
-    incoming_nurse_id INT NULL,
-    shift_type ENUM('Day', 'Evening', 'Night') NOT NULL,
-    handover_date DATE NOT NULL,
-    summary_notes TEXT NOT NULL,
-    critical_patients_count INT DEFAULT 0,
-    pending_tasks_count INT DEFAULT 0,
-    status ENUM('Pending_Acceptance', 'Accepted') NOT NULL DEFAULT 'Pending_Acceptance',
-    accepted_at DATETIME NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id),
-    FOREIGN KEY (outgoing_nurse_id) REFERENCES Staff(staff_id),
-    FOREIGN KEY (incoming_nurse_id) REFERENCES Staff(staff_id)
-);
-
-
-CREATE TABLE IF NOT EXISTS Ward_Inventory_Requests (
-    request_id INT AUTO_INCREMENT PRIMARY KEY,
-    ward_id INT NOT NULL,
-    nurse_id INT NOT NULL,
-    medicine_id INT NULL,
-    item_name VARCHAR(100) NOT NULL,
-    quantity INT NOT NULL,
-    status ENUM('Requested', 'Dispatched', 'Received') NOT NULL DEFAULT 'Requested',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id),
-    FOREIGN KEY (nurse_id) REFERENCES Staff(staff_id),
-    FOREIGN KEY (medicine_id) REFERENCES Medicines(medicine_id)
 );
