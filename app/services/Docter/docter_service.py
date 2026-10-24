@@ -8,6 +8,31 @@ def get_doctor_medicine_list():
         return docter_repo.get_doctor_medicine_list(conn)
 
 
+def get_lab_order_patient_details():
+    with get_db() as conn:
+        return docter_repo.get_lab_order_patient_details(conn)
+
+
+def create_lab_order(patient_id: int, doctor_user_id: int, test_type: str):
+    try:
+        with get_db() as conn:
+            return docter_repo.create_lab_order(conn, patient_id, doctor_user_id, test_type)
+    except mysql.connector.Error as err:
+        if err.sqlstate == "45000":
+            raise ValueError(err.msg) from err
+        raise
+
+
+def get_patient_lab_results(patient_id: int):
+    try:
+        with get_db() as conn:
+            return docter_repo.get_patient_lab_results(conn, patient_id)
+    except mysql.connector.Error as err:
+        if err.sqlstate == "45000":
+            raise ValueError(err.msg) from err
+        raise
+
+
 def create_prescription(
     patient_id: int,
     apt_id: int,

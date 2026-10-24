@@ -18,6 +18,10 @@ from app.schema.Docter.docter_schema import (
     CreatePrescriptionRequest,
     CreatePrescriptionResponse,
     CreateAdmittedPrescriptionRequest,
+    LabOrderPatientDetailsResponse,
+    CreateLabOrderRequest,
+    CreateLabOrderResponse,
+    PatientLabResultResponse,
 )
 from app.services.Docter import docter_service
 
@@ -29,6 +33,48 @@ router = APIRouter(prefix="/doctor", tags=["Doctor"])
 def get_doctor_medicines():
     """Return the medicine list used by the doctor prescription workflow."""
     return docter_service.get_doctor_medicine_list()
+
+
+@router.get(
+    "/lab-order-patients",
+    response_model=List[LabOrderPatientDetailsResponse],
+)
+def get_lab_order_patients():
+    """Return patient and appointment details exposed by the lab-order view."""
+    try:
+        return docter_service.get_lab_order_patient_details()
+    except Exception as e:
+        logger.exception("Failed to load lab-order patients: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to load lab-order patients")
+
+
+@router.post("/lab-orders", response_model=CreateLabOrderResponse, status_code=201)
+def create_lab_order(payload: CreateLabOrderRequest):
+    try:
+        return docter_service.create_lab_order(
+            payload.patient_id,
+            payload.doctor_user_id,
+            payload.test_type,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Failed to save lab order")
+        raise HTTPException(status_code=500, detail="Failed to save lab order")
+
+
+@router.get(
+    "/lab-orders/patient/{patient_id}",
+    response_model=List[PatientLabResultResponse],
+)
+def get_patient_lab_results(patient_id: int):
+    try:
+        return docter_service.get_patient_lab_results(patient_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("Failed to load patient lab results")
+        raise HTTPException(status_code=500, detail="Failed to load patient lab results")
 
 
 @router.post("/prescriptions", response_model=CreatePrescriptionResponse)

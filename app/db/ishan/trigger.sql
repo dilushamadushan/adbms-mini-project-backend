@@ -181,3 +181,100 @@ BEGIN
   );
 END$$
 DELIMITER ;
+
+
+
+
+
+
+
+-- Logs every new lab order in the audit log.
+
+DROP TRIGGER IF EXISTS trg_lab_order_after_insert;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_lab_order_after_insert
+AFTER INSERT ON Lab_Orders
+FOR EACH ROW
+BEGIN
+    DECLARE v_actor_id INT;
+
+    SELECT user_id
+    INTO v_actor_id
+    FROM Staff
+    WHERE staff_id = NEW.doctor_id
+    LIMIT 1;
+
+    INSERT INTO Audit_Logs (
+        actor_id,
+        action_type,
+        resource_table,
+        details,
+        timestamp
+    )
+    VALUES (
+        v_actor_id,
+        'LAB_ORDER_CREATED',
+        'Lab_Orders',
+        JSON_OBJECT(
+            'lab_id', NEW.lab_id,
+            'patient_id', NEW.patient_id,
+            'doctor_id', NEW.doctor_id,
+            'test_type', NEW.test_type,
+            'status', NEW.status
+        ),
+        NOW()
+    );
+END$$
+
+DELIMITER ;
+
+
+-- Logs when a lab order changes from Pending to Completed.
+
+DROP TRIGGER IF EXISTS trg_lab_order_pending_to_completed;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_lab_order_pending_to_completed
+AFTER UPDATE ON Lab_Orders
+FOR EACH ROW
+BEGIN
+    DECLARE v_actor_id INT;
+
+    IF OLD.status = 'Pending'
+       AND NEW.status = 'Completed' THEN
+
+        SELECT user_id
+        INTO v_actor_id
+        FROM Staff
+        WHERE staff_id = NEW.doctor_id
+        LIMIT 1;
+
+        INSERT INTO Audit_Logs (
+            actor_id,
+            action_type,
+            resource_table,
+            details,
+            timestamp
+        )
+        VALUES (
+            v_actor_id,
+            'LAB_RESULT_COMPLETED',
+            'Lab_Orders',
+            JSON_OBJECT(
+                'lab_id', NEW.lab_id,
+                'patient_id', NEW.patient_id,
+                'doctor_id', NEW.doctor_id,
+                'test_type', NEW.test_type,
+                'old_status', OLD.status,
+                'new_status', NEW.status,
+                'results_text', COALESCE(NEW.results_text, '')
+            ),
+            NOW()
+        );
+    END IF;
+END$$
+
+DELIMITER ;

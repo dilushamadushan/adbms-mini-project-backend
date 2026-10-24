@@ -16,6 +16,77 @@ def get_doctor_medicine_list(conn: MySQLConnection) -> list[dict]:
         cursor.close()
 
 
+def get_lab_order_patient_details(conn: MySQLConnection) -> list[dict]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT v.patient_id, v.patient_name, v.age, v.blood_group, v.allergies,
+                   (
+                       SELECT ad.gender
+                       FROM admissions ad
+                       WHERE ad.patient_id = v.patient_id
+                       ORDER BY ad.admitted_at DESC
+                       LIMIT 1
+                   ) AS gender,
+                   v.appointment_id, v.appointment_date, v.appointment_status
+            FROM vw_lab_order_patient_details v
+            ORDER BY v.appointment_date DESC, v.appointment_id DESC
+            """
+        )
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+
+
+def create_lab_order(
+    conn: MySQLConnection,
+    patient_id: int,
+    doctor_user_id: int,
+    test_type: str,
+) -> dict:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT s.staff_id
+            FROM Staff s
+            INNER JOIN Users u ON u.user_id = s.user_id
+            WHERE s.user_id = %s
+              AND LOWER(u.role) = 'doctor'
+              AND u.is_active = TRUE
+            LIMIT 1
+            """,
+            (doctor_user_id,),
+        )
+        doctor = cursor.fetchone()
+        if not doctor:
+            raise ValueError("Active doctor not found")
+
+        cursor.callproc(
+            "sp_create_lab_order",
+            (patient_id, int(doctor["staff_id"]), test_type),
+        )
+        for result in cursor.stored_results():
+            row = result.fetchone()
+            if row:
+                return row
+        raise ValueError("Lab-order procedure did not return the saved order")
+    finally:
+        cursor.close()
+
+
+def get_patient_lab_results(conn: MySQLConnection, patient_id: int) -> list[dict]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("sp_get_patient_lab_results", (patient_id,))
+        for result in cursor.stored_results():
+            return result.fetchall()
+        return []
+    finally:
+        cursor.close()
+
+
 def create_prescription(
     conn: MySQLConnection,
     patient_id: int,
