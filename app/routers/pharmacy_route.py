@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query, status
 import app.services.pharmacy_service as service
 from app.schema.pharmacy_schema import (
     MedicineCreate, MedicineUpdate, MedicineResponse,
-    StockReceiptCreate, StockReceiptResponse,
+    StockReceiptCreate, StockReceiptResponse, StockReceiptItemResponse,
     LowStockAlertResponse, ExpiringMedicineResponse,
     TopDispensedMedicineResponse, DailyDispensingReportResponse,
     PharmacyDashboardKpisResponse
@@ -25,6 +25,13 @@ def get_inventory(
 ):
     """List all medicines with current stock, pricing, and health status."""
     return service.fetch_medicines(search=search, status_filter=status)
+
+@router.get("/inventory/stock-receipts", response_model=List[StockReceiptItemResponse])
+def get_stock_receipts_history(
+    limit: int = Query(50, ge=1, le=200, description="Number of recent stock receipts to return")
+):
+    """Audit log of all received stock shipments and batch deliveries."""
+    return service.fetch_stock_receipts_history(limit=limit)
 
 @router.get("/inventory/{medicine_id}", response_model=MedicineResponse)
 def get_medicine(medicine_id: int):
@@ -83,7 +90,7 @@ def create_restock_order(
     payload: PurchaseOrderCreate,
     pharmacist_id: int = Query(5, description="Staff ID placing the order")
 ):
-    """Create a new official Restock Purchase Order (enforces min 3 business days lead time)."""
+    """Create a new official Restock Purchase Order (enforces min 3 days lead time)."""
     return service.create_order(payload, pharmacist_id=pharmacist_id)
 
 @router.get("/orders", response_model=List[PurchaseOrderResponse])
