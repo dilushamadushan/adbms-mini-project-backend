@@ -123,14 +123,29 @@ def receive_stock(conn: MySQLConnection, medicine_id: int, quantity: int, expiry
             cursor.execute("""
                 UPDATE Medicines
                 SET stock_qty = stock_qty + %s,
-                    expiry_date = CASE 
-                        WHEN expiry_date IS NULL OR %s < expiry_date THEN %s
-                        ELSE expiry_date
-                    END
+                    expiry_date = %s,
+                    is_active = TRUE
                 WHERE medicine_id = %s
-            """, (quantity, expiry_date, expiry_date, medicine_id))
+            """, (quantity, expiry_date, medicine_id))
+        else:
+            cursor.execute("""
+                UPDATE Medicines
+                SET expiry_date = %s,
+                    is_active = TRUE
+                WHERE medicine_id = %s
+            """, (expiry_date, medicine_id))
 
         return receipt_id
+    finally:
+        cursor.close()
+
+def get_stock_receipts_history(conn: MySQLConnection, limit: int = 50) -> List[Dict[str, Any]]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("sp_get_stock_receipts_history", (limit,))
+        for res in cursor.stored_results():
+            return res.fetchall()
+        return []
     finally:
         cursor.close()
 
@@ -238,10 +253,10 @@ def create_purchase_order(
 ) -> int:
     cursor = conn.cursor(dictionary=True)
     try:
-        # Validate lead time: minimum 3 business days in advance
+        # Validate lead time: minimum 1 day in advance
         from datetime import timedelta
-        if expected_delivery_date < date.today() + timedelta(days=3):
-            raise ValueError("Restock lead time must be at least 3 business days in advance.")
+        if expected_delivery_date < date.today() + timedelta(days=1):
+            raise ValueError("Restock lead time must be at least 1 day in advance.")
 
         # Calculate totals
         total_cost = Decimal("0.00")
@@ -381,8 +396,8 @@ def get_purchase_order_by_id(conn: MySQLConnection, order_id: int) -> Optional[D
 def update_purchase_order_status(conn: MySQLConnection, order_id: int, status: str) -> bool:
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE Purchase_Orders SET status = %s WHERE order_id = %s", (status, order_id))
-        return cursor.rowcount > 0
+        cursor.callproc("sp_update_purchase_order_status", (order_id, status))
+        return True
     finally:
         cursor.close()
 
