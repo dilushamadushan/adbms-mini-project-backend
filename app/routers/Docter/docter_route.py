@@ -14,12 +14,18 @@ from app.schema.Docter.docter_schema import (
     DischargeRequestResponse,
     CompleteAppointmentRequest,
     CompleteAppointmentResponse,
+    DoctorMedicineResponse,
 )
 from app.services.Docter import docter_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/doctor", tags=["Doctor"])
+
+@router.get("/medicines", response_model=List[DoctorMedicineResponse])
+def get_doctor_medicines():
+    """Return the medicine list used by the doctor prescription workflow."""
+    return docter_service.get_doctor_medicine_list()
 
 
 @router.post("/appointments/complete", response_model=CompleteAppointmentResponse)

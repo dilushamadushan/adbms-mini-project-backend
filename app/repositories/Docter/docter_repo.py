@@ -1,5 +1,19 @@
 from mysql.connector.connection import MySQLConnection
 
+def get_doctor_medicine_list(conn: MySQLConnection) -> list[dict]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT medicine_id, med_name, generic_name
+            FROM vw_doctor_medicine_list
+            ORDER BY med_name
+            """
+        )
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+
 def _get_staff_id_for_user(conn: MySQLConnection, user_id: int) -> int | None:
     cursor = conn.cursor(dictionary=True)
     try:

@@ -3,6 +3,10 @@ import mysql.connector
 from app.core.database import get_db
 from app.repositories.Docter import docter_repo
 
+def get_doctor_medicine_list():
+    with get_db() as conn:
+        return docter_repo.get_doctor_medicine_list(conn)
+
 def list_appointments_by_doctor(doctor_id: int):
     with get_db() as conn:
         if not docter_repo.doctor_exists(conn, doctor_id):

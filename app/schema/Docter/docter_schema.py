@@ -148,3 +148,9 @@ class CompleteAppointmentRequest(BaseModel):
 
 class CompleteAppointmentResponse(BaseModel):
     message: str
+
+
+class DoctorMedicineResponse(BaseModel):
+    medicine_id: int
+    med_name: str
+    generic_name: Optional[str] = None
