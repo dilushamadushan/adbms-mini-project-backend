@@ -77,6 +77,10 @@ def record_stock_receipt(data: StockReceiptCreate) -> Dict[str, Any]:
             "received_by": data.received_by
         }
 
+def fetch_stock_receipts_history(limit: int = 50) -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        return repo.get_stock_receipts_history(conn, limit=limit)
+
 def fetch_low_stock_alerts() -> List[Dict[str, Any]]:
     with get_db() as conn:
         return repo.get_low_stock_alerts(conn)
@@ -130,7 +134,10 @@ def change_order_status(order_id: int, new_status: str) -> Dict[str, Any]:
         order = repo.get_purchase_order_by_id(conn, order_id)
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order #{order_id} not found.")
-        repo.update_purchase_order_status(conn, order_id, new_status)
+        try:
+            repo.update_purchase_order_status(conn, order_id, new_status)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return repo.get_purchase_order_by_id(conn, order_id)
 
 def receive_and_restock_order(order_id: int, staff_id: int, expiry_date: Optional[date] = None) -> Dict[str, Any]:

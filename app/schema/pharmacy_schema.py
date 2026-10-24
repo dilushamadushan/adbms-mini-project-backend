@@ -52,6 +52,17 @@ class StockReceiptResponse(BaseModel):
     received_by: int
     received_at: Optional[datetime] = None
 
+class StockReceiptItemResponse(BaseModel):
+    receipt_id: int
+    medicine_id: int
+    med_name: str
+    generic_name: Optional[str] = None
+    quantity: int
+    expiry_date: date
+    received_by: int
+    received_by_name: Optional[str] = None
+    received_at: datetime
+
 # ---------------------------------------------------------------------------
 # Alerts & Reports Schemas
 # ---------------------------------------------------------------------------
@@ -109,7 +120,7 @@ class PurchaseOrderItemCreate(BaseModel):
 
 class PurchaseOrderCreate(BaseModel):
     supplier_name: Optional[str] = "State Pharmaceuticals Corporation"
-    expected_delivery_date: date = Field(..., description="Lead time must be at least 3 business days")
+    expected_delivery_date: date = Field(..., description="Lead time must be at least 3 days")
     notes: Optional[str] = None
     items: List[PurchaseOrderItemCreate]
 
