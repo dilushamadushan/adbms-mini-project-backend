@@ -15,6 +15,9 @@ from app.schema.Docter.docter_schema import (
     CompleteAppointmentRequest,
     CompleteAppointmentResponse,
     DoctorMedicineResponse,
+    CreatePrescriptionRequest,
+    CreatePrescriptionResponse,
+    CreateAdmittedPrescriptionRequest,
 )
 from app.services.Docter import docter_service
 
@@ -26,6 +29,43 @@ router = APIRouter(prefix="/doctor", tags=["Doctor"])
 def get_doctor_medicines():
     """Return the medicine list used by the doctor prescription workflow."""
     return docter_service.get_doctor_medicine_list()
+
+
+@router.post("/prescriptions", response_model=CreatePrescriptionResponse)
+def create_prescription(payload: CreatePrescriptionRequest):
+    try:
+        return docter_service.create_prescription(
+            payload.patient_id,
+            payload.apt_id,
+            payload.doctor_id,
+            payload.diagnosis,
+            payload.clinical_notes,
+            [medicine.model_dump() for medicine in payload.medicines],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save prescription: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to save prescription")
+
+
+@router.post("/admitted-prescriptions", response_model=CreatePrescriptionResponse)
+def create_admitted_prescription(payload: CreateAdmittedPrescriptionRequest):
+    try:
+        return docter_service.create_admitted_prescription(
+            payload.patient_id,
+            payload.apt_id,
+            payload.doctor_id,
+            payload.diagnosis,
+            payload.clinical_notes,
+            [medicine.model_dump() for medicine in payload.medicines],
+            [order.model_dump() for order in payload.nurse_orders],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Failed to save admitted prescription")
+        raise HTTPException(status_code=500, detail="Failed to save admitted prescription")
 
 
 @router.post("/appointments/complete", response_model=CompleteAppointmentResponse)

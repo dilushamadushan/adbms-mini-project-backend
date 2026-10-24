@@ -369,6 +369,295 @@ DELIMITER ;
 
 
 
+
+
+
+
+-- It checks the data, then saves the medical record and
+-- all the medicines together. If anything is wrong, it
+-- saves nothing and shows an error message.
+-- =====================================================
+DROP PROCEDURE IF EXISTS `sp_create_prescription`;
+DELIMITER $$
+CREATE PROCEDURE `sp_create_prescription`(
+  IN p_patient_id INT,        -- which patient
+  IN p_apt_id INT,            -- which appointment
+  IN p_doctor_id INT,         -- the doctor's staff_id
+  IN p_diagnosis TEXT,        -- what is wrong
+  IN p_clinical_notes TEXT,   -- doctor's notes
+  IN p_medicines JSON         -- list of medicines from the form
+)
+BEGIN
+  DECLARE v_record_id INT;
+
+  -- If any error happens, undo everything and show the error
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  -- CHECK 1: diagnosis must not be empty
+  IF p_diagnosis IS NULL OR TRIM(p_diagnosis) = '' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Diagnosis is required';
+  END IF;
+
+  -- CHECK 2: there must be at least one medicine
+  IF p_medicines IS NULL OR JSON_LENGTH(p_medicines) = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'At least one medicine is required';
+  END IF;
+
+  -- CHECK 3: the doctor must be a real doctor
+  IF NOT EXISTS (SELECT 1 FROM staff s JOIN users u ON u.user_id = s.user_id
+                 WHERE s.staff_id = p_doctor_id AND u.role = 'doctor') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Doctor not found';
+  END IF;
+
+  -- CHECK 4: the appointment must belong to this doctor and this patient
+  IF NOT EXISTS (SELECT 1 FROM appointments
+                 WHERE apt_id = p_apt_id AND patient_id = p_patient_id
+                   AND doctor_id = p_doctor_id) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Appointment not found for this doctor and patient';
+  END IF;
+
+  -- CHECK 5: the patient must NOT be admitted right now
+  IF EXISTS (SELECT 1 FROM admissions
+             WHERE patient_id = p_patient_id AND status = 'Admitted') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Patient is currently admitted. Use the admission flow.';
+  END IF;
+
+  START TRANSACTION;   -- from here, everything is saved together or not at all
+
+  -- SAVE 1: the medical record (this fires the trigger in section 4)
+  INSERT INTO medical_records (patient_id, doctor_id, apt_id, diagnosis, clinical_notes)
+  VALUES (p_patient_id, p_doctor_id, p_apt_id, TRIM(p_diagnosis), p_clinical_notes);
+  SET v_record_id = LAST_INSERT_ID();   -- remember the new record_id
+
+  -- SAVE 2: one prescription row for each medicine
+  -- med_name comes from the medicines table (so the spelling is always right)
+  -- dosage = dose + frequency, for example "500 mg, Three times daily"
+  INSERT INTO prescriptions (record_id, med_name, dosage, duration)
+  SELECT v_record_id, m.med_name,
+         CONCAT(TRIM(j.dose), ', ', TRIM(j.frequency)), TRIM(j.duration)
+  FROM JSON_TABLE(p_medicines, '$[*]' COLUMNS (
+         medicine_id INT          PATH '$.medicine_id',
+         dose        VARCHAR(50)  PATH '$.dose',
+         frequency   VARCHAR(50)  PATH '$.frequency',
+         duration    VARCHAR(50)  PATH '$.duration')) AS j
+  JOIN medicines m ON m.medicine_id = j.medicine_id
+  WHERE TRIM(COALESCE(j.dose, '')) <> ''
+    AND TRIM(COALESCE(j.frequency, '')) <> ''
+    AND TRIM(COALESCE(j.duration, '')) <> '';
+
+  -- CHECK 6: every medicine sent must have been saved
+  -- (if one had an empty dose or a wrong medicine_id, the counts differ)
+  IF ROW_COUNT() <> JSON_LENGTH(p_medicines) THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Each medicine needs a valid medicine, dose, frequency and duration';
+  END IF;
+
+  COMMIT;                              -- make it permanent
+  SELECT v_record_id AS record_id;     -- send the new record_id back
+END$$
+DELIMITER ;
+
+
+
+
+
+
+
+
+
+
+
+
+
+USE `hms`;
+
+-- WHY:  Runs when the doctor clicks "Save for admission" for an admitted patient.
+-- WHAT: Checks the data first. If all is fine, it saves 4 things together:
+--         1. medical_records                     (diagnosis + notes)
+--         2. prescriptions                       (one row per medicine)
+--         3. medication_administration_records   (one row per medicine, status Not Given)
+--         4. doctor_orders                       (nurse instructions, status Pending)
+--       If anything is wrong, it saves nothing and shows an error.
+
+DROP PROCEDURE IF EXISTS `sp_create_admitted_prescription`;
+
+DELIMITER $$
+
+CREATE PROCEDURE `sp_create_admitted_prescription`(
+  IN p_patient_id INT,
+  IN p_apt_id INT,
+  IN p_doctor_id INT,
+  IN p_diagnosis TEXT,
+  IN p_clinical_notes TEXT,
+  IN p_medicines JSON,
+  IN p_nurse_orders JSON
+)
+BEGIN
+  DECLARE v_record_id INT;
+
+  -- If any error happens, undo everything and show the error
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  -- CHECK 1: diagnosis must not be empty
+  IF p_diagnosis IS NULL OR TRIM(p_diagnosis) = '' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Diagnosis is required';
+  END IF;
+
+  -- CHECK 2: at least one medicine is required
+  IF p_medicines IS NULL OR JSON_LENGTH(p_medicines) = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'At least one medicine is required';
+  END IF;
+
+  -- CHECK 3: the same medicine cannot be listed twice
+  IF (
+    SELECT COUNT(DISTINCT d.medicine_id)
+    FROM JSON_TABLE(
+      p_medicines,
+      '$[*]' COLUMNS (medicine_id INT PATH '$.medicine_id')
+    ) AS d
+  ) <> JSON_LENGTH(p_medicines) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'The same medicine is listed more than once';
+  END IF;
+
+  -- CHECK 4: doctor must exist
+  IF NOT EXISTS (
+    SELECT 1
+    FROM staff s
+    INNER JOIN users u ON u.user_id = s.user_id
+    WHERE s.staff_id = p_doctor_id
+      AND LOWER(u.role) = 'doctor'
+  ) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Doctor not found';
+  END IF;
+
+  -- CHECK 5: appointment must belong to this doctor and patient
+  IF NOT EXISTS (
+    SELECT 1
+    FROM appointments
+    WHERE apt_id = p_apt_id
+      AND patient_id = p_patient_id
+      AND doctor_id = p_doctor_id
+  ) THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Appointment not found for this doctor and patient';
+  END IF;
+
+  -- CHECK 6: patient must currently be admitted
+  IF NOT EXISTS (
+    SELECT 1
+    FROM admissions
+    WHERE patient_id = p_patient_id
+      AND status = 'Admitted'
+  ) THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Patient is not admitted. Use the normal prescription.';
+  END IF;
+
+  START TRANSACTION;   -- everything below is saved together or not at all
+
+  -- SAVE 1: Medical record
+  INSERT INTO medical_records (patient_id, doctor_id, apt_id, diagnosis, clinical_notes)
+  VALUES (p_patient_id, p_doctor_id, p_apt_id, TRIM(p_diagnosis), p_clinical_notes);
+
+  SET v_record_id = LAST_INSERT_ID();
+
+  -- SAVE 2: Prescriptions (one row per medicine)
+  INSERT INTO prescriptions (record_id, med_name, dosage, duration)
+  SELECT
+    v_record_id,
+    m.med_name,
+    CONCAT(TRIM(j.dose), ', ', TRIM(j.frequency)),
+    TRIM(j.duration)
+  FROM JSON_TABLE(
+    p_medicines,
+    '$[*]' COLUMNS (
+      medicine_id INT PATH '$.medicine_id',
+      dose        VARCHAR(50) PATH '$.dose',
+      frequency   VARCHAR(50) PATH '$.frequency',
+      duration    VARCHAR(50) PATH '$.duration'
+    )
+  ) AS j
+  INNER JOIN medicines m ON m.medicine_id = j.medicine_id
+  WHERE TRIM(COALESCE(j.dose, '')) <> ''
+    AND TRIM(COALESCE(j.frequency, '')) <> ''
+    AND TRIM(COALESCE(j.duration, '')) <> '';
+
+  -- CHECK 7: every medicine must be saved
+  IF ROW_COUNT() <> JSON_LENGTH(p_medicines) THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Each medicine needs a valid medicine, dose, frequency and duration';
+  END IF;
+
+  -- SAVE 3: Dose-tracking rows, status Not Given (nurse updates later)
+  INSERT INTO medication_administration_records (
+    rx_id, patient_id, administered_by, scheduled_time, status, notes
+  )
+  SELECT
+    rx.rx_id,
+    p_patient_id,
+    p_doctor_id,
+    COALESCE(NULLIF(TRIM(j.first_dose), ''), '08:00'),
+    'Not Given',
+    NULLIF(TRIM(j.notes), '')
+  FROM JSON_TABLE(
+    p_medicines,
+    '$[*]' COLUMNS (
+      medicine_id INT PATH '$.medicine_id',
+      first_dose  VARCHAR(20) PATH '$.first_dose',
+      notes       TEXT PATH '$.notes'
+    )
+  ) AS j
+  INNER JOIN medicines m ON m.medicine_id = j.medicine_id
+  INNER JOIN prescriptions rx
+    ON rx.med_name = m.med_name
+   AND rx.record_id = v_record_id;
+
+  -- CHECK 8: every prescription needs a dose row
+  IF ROW_COUNT() <> JSON_LENGTH(p_medicines) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Could not create the dose tracking rows';
+  END IF;
+
+  -- SAVE 4: Nurse instructions (optional), status Pending
+  IF p_nurse_orders IS NOT NULL AND JSON_LENGTH(p_nurse_orders) > 0 THEN
+
+    INSERT INTO doctor_orders (patient_id, doctor_id, order_type, instruction)
+    SELECT p_patient_id, p_doctor_id, o.order_type, TRIM(o.instruction)
+    FROM JSON_TABLE(
+      p_nurse_orders,
+      '$[*]' COLUMNS (
+        order_type  VARCHAR(20) PATH '$.order_type',
+        instruction TEXT PATH '$.instruction'
+      )
+    ) AS o
+    WHERE o.order_type IN ('Medication','Lab','Diet','IV_Fluids','Nursing_Care','Special')
+      AND TRIM(COALESCE(o.instruction, '')) <> '';
+
+    -- CHECK 9: every nurse instruction must be saved
+    IF ROW_COUNT() <> JSON_LENGTH(p_nurse_orders) THEN
+      SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Each nurse instruction needs a valid order type and instruction';
+    END IF;
+
+  END IF;
+
+  COMMIT;                            -- make it permanent
+  SELECT v_record_id AS record_id;   -- send the new record_id back
+END$$
+
+DELIMITER ;
+
+
+
+
+
 -----------------------patient------------------------------------------
 
 

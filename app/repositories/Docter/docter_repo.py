@@ -1,3 +1,4 @@
+import json
 from mysql.connector.connection import MySQLConnection
 
 def get_doctor_medicine_list(conn: MySQLConnection) -> list[dict]:
@@ -11,6 +12,70 @@ def get_doctor_medicine_list(conn: MySQLConnection) -> list[dict]:
             """
         )
         return cursor.fetchall()
+    finally:
+        cursor.close()
+
+
+def create_prescription(
+    conn: MySQLConnection,
+    patient_id: int,
+    apt_id: int,
+    doctor_id: int,
+    diagnosis: str,
+    clinical_notes: str | None,
+    medicines: list[dict],
+) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc(
+            "sp_create_prescription",
+            (
+                patient_id,
+                apt_id,
+                doctor_id,
+                diagnosis,
+                clinical_notes,
+                json.dumps(medicines),
+            ),
+        )
+        for result in cursor.stored_results():
+            row = result.fetchone()
+            if row and row.get("record_id") is not None:
+                return int(row["record_id"])
+        raise ValueError("Prescription procedure did not return a record ID")
+    finally:
+        cursor.close()
+
+
+def create_admitted_prescription(
+    conn: MySQLConnection,
+    patient_id: int,
+    apt_id: int,
+    doctor_id: int,
+    diagnosis: str,
+    clinical_notes: str | None,
+    medicines: list[dict],
+    nurse_orders: list[dict],
+) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc(
+            "sp_create_admitted_prescription",
+            (
+                patient_id,
+                apt_id,
+                doctor_id,
+                diagnosis,
+                clinical_notes,
+                json.dumps(medicines),
+                json.dumps(nurse_orders),
+            ),
+        )
+        for result in cursor.stored_results():
+            row = result.fetchone()
+            if row and row.get("record_id") is not None:
+                return int(row["record_id"])
+        raise ValueError("Admitted prescription procedure did not return a record ID")
     finally:
         cursor.close()
 

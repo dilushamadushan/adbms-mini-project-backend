@@ -154,3 +154,48 @@ class DoctorMedicineResponse(BaseModel):
     medicine_id: int
     med_name: str
     generic_name: Optional[str] = None
+
+
+class PrescriptionMedicineRequest(BaseModel):
+    medicine_id: int
+    dose: str
+    frequency: str
+    duration: str
+
+
+class CreatePrescriptionRequest(BaseModel):
+    patient_id: int
+    apt_id: int
+    doctor_id: int
+    diagnosis: str
+    clinical_notes: Optional[str] = None
+    medicines: list[PrescriptionMedicineRequest]
+
+
+class CreatePrescriptionResponse(BaseModel):
+    message: str
+    record_id: int
+
+
+class AdmittedPrescriptionMedicineRequest(BaseModel):
+    medicine_id: int
+    dose: str
+    frequency: str
+    duration: str
+    first_dose: str
+    notes: str | None = None
+
+
+class NurseOrderRequest(BaseModel):
+    order_type: str
+    instruction: str
+
+
+class CreateAdmittedPrescriptionRequest(BaseModel):
+    patient_id: int
+    apt_id: int
+    doctor_id: int
+    diagnosis: str
+    clinical_notes: str | None = None
+    medicines: list[AdmittedPrescriptionMedicineRequest]
+    nurse_orders: list[NurseOrderRequest] = []
