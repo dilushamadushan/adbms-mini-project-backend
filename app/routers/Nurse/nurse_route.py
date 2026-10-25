@@ -25,6 +25,8 @@ from app.schema.Nurse.nurse_schema import (
     AssignBedRequest,
     UnassignedAdmissionItem,
     NurseStaffItem,
+    NurseLabOrderItem,
+    LabOrderCompleteRequest,
 )
 from app.services.Nurse import nurse_service
 
@@ -350,5 +352,38 @@ def get_ward_nursing_notes():
     except Exception as e:
         logger.exception("Failed to get ward nursing notes: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/lab-orders", response_model=List[NurseLabOrderItem])
+def get_nurse_lab_orders(status: Optional[str] = Query(None)):
+    try:
+        return nurse_service.get_nurse_lab_orders(status)
+    except Exception as e:
+        logger.exception("Failed to get lab orders: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/lab-orders/pending-count")
+def get_pending_lab_count():
+    try:
+        count = nurse_service.get_pending_lab_count()
+        return {"count": count}
+    except Exception as e:
+        logger.exception("Failed to get pending lab count: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/lab-orders/{lab_id}/complete")
+def complete_lab_order(
+    lab_id: int,
+    payload: LabOrderCompleteRequest,
+    nurse_user_id: int = Depends(_get_current_nurse_id),
+):
+    try:
+        return nurse_service.complete_lab_order(lab_id, nurse_user_id, payload.results_text)
+    except Exception as e:
+        logger.exception("Failed to complete lab order: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 

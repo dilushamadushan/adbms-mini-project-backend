@@ -123,3 +123,39 @@ BEGIN
 END //
 
 DELIMITER ;
+
+
+DELIMITER //
+
+DROP TRIGGER IF EXISTS trg_notify_nurse_new_lab_order //
+
+CREATE TRIGGER trg_notify_nurse_new_lab_order
+AFTER INSERT ON Lab_Orders
+FOR EACH ROW
+BEGIN
+    DECLARE v_patient_name VARCHAR(200);
+    DECLARE v_doc_name VARCHAR(200);
+
+    IF NEW.status = 'Pending' THEN
+        SELECT CONCAT(first_name, ' ', last_name) INTO v_patient_name
+        FROM Patients
+        WHERE patient_id = NEW.patient_id;
+
+        SELECT CONCAT(first_name, ' ', last_name) INTO v_doc_name
+        FROM Staff
+        WHERE staff_id = NEW.doctor_id;
+
+        INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+        VALUES (
+            'NEW LAB TEST ORDERED',
+            CONCAT('Doctor ', COALESCE(v_doc_name, 'Physician'), ' ordered ', NEW.test_type, ' for patient ', COALESCE(v_patient_name, CONCAT('ID #', NEW.patient_id)), '.'),
+            'LAB_ORDER_NEW',
+            'nurse',
+            JSON_OBJECT('lab_id', NEW.lab_id, 'patient_id', NEW.patient_id, 'test_type', NEW.test_type),
+            NOW()
+        );
+    END IF;
+END //
+
+DELIMITER ;
+

@@ -183,4 +183,20 @@ def get_ward_nursing_notes() -> List[Dict[str, Any]]:
         return nurse_repo.get_ward_nursing_notes(conn)
 
 
+def get_nurse_lab_orders(status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        return nurse_repo.get_nurse_lab_orders(conn, status_filter)
+
+
+def complete_lab_order(lab_id: int, nurse_user_id: int, results_text: str) -> Dict[str, Any]:
+    with get_db() as conn:
+        return nurse_repo.complete_lab_order(conn, lab_id, nurse_user_id, results_text)
+
+
+def get_pending_lab_count() -> int:
+    with get_db() as conn:
+        return nurse_repo.get_pending_lab_count(conn)
+
+
+
 
