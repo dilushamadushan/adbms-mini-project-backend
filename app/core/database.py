@@ -35,7 +35,7 @@ def _build_config() -> dict:
     }
 
 _POOL_NAME = "app_pool"
-_POOL_SIZE  = int(os.getenv("DB_POOL_SIZE", "5"))
+_POOL_SIZE  = int(os.getenv("DB_POOL_SIZE", "10"))
 
 _pool: pooling.MySQLConnectionPool | None = None
 

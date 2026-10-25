@@ -1,8 +1,40 @@
-USE hms;
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_issued;
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_revoked;
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_deleted;
+
+DROP TRIGGER IF EXISTS trg_prevent_department_self_parent;
+DROP TRIGGER IF EXISTS trg_audit_department_created;
+DROP TRIGGER IF EXISTS trg_audit_department_deleted;
+
+DROP TRIGGER IF EXISTS trg_notify_staff_created;
+DROP TRIGGER IF EXISTS trg_notify_department_created;
+DROP TRIGGER IF EXISTS trg_notify_department_deleted;
+
+DROP TRIGGER IF EXISTS trg_prevent_duplicate_open_admission;
+DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment;
+DROP TRIGGER IF EXISTS trg_notify_admission_inserted;
+
+DROP TRIGGER IF EXISTS trg_after_stock_receipt_insert;
+DROP TRIGGER IF EXISTS trg_before_dispensation_insert;
+DROP TRIGGER IF EXISTS trg_after_dispensation_insert;
+
+DROP TRIGGER IF EXISTS trg_check_po_delivery_lead_time;
+DROP TRIGGER IF EXISTS trg_check_po_receive_lead_time;
+
+
+
+DROP TRIGGER IF EXISTS trg_discharge_after_insert;
+DROP TRIGGER IF EXISTS trg_medical_record_after_insert;
+DROP TRIGGER IF EXISTS trg_audit_mar_administration;
+DROP TRIGGER IF EXISTS trg_mar_before_update;
+DROP TRIGGER IF EXISTS trg_mar_after_update;
+DROP TRIGGER IF EXISTS trg_doctor_order_after_insert;
+DROP TRIGGER IF EXISTS trg_lab_order_after_insert;
+DROP TRIGGER IF EXISTS trg_lab_order_pending_to_completed;
 
 DELIMITER //
 
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_issued; //
+-- TG/1407 --
 
 CREATE TRIGGER trg_audit_refresh_token_issued
 AFTER INSERT ON Refresh_Tokens
@@ -21,12 +53,6 @@ BEGIN
         )
     );
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_revoked; //
 
 CREATE TRIGGER trg_audit_refresh_token_revoked
 AFTER UPDATE ON Refresh_Tokens
@@ -48,12 +74,6 @@ BEGIN
     END IF;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_deleted; //
-
 CREATE TRIGGER trg_audit_refresh_token_deleted
 AFTER DELETE ON Refresh_Tokens
 FOR EACH ROW
@@ -72,12 +92,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_prevent_department_self_parent; //
-
 CREATE TRIGGER trg_prevent_department_self_parent
 BEFORE UPDATE ON Departments
 FOR EACH ROW
@@ -87,12 +101,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Integrity violation: A department cannot be set as its own parent';
     END IF;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_department_created; //
 
 CREATE TRIGGER trg_audit_department_created
 AFTER INSERT ON Departments
@@ -112,12 +120,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_department_deleted; //
-
 CREATE TRIGGER trg_audit_department_deleted
 AFTER DELETE ON Departments
 FOR EACH ROW
@@ -135,12 +137,6 @@ BEGIN
         NOW()
     );
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_staff_created; //
 
 CREATE TRIGGER trg_notify_staff_created
 AFTER INSERT ON Staff
@@ -171,12 +167,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_department_created; //
-
 CREATE TRIGGER trg_notify_department_created
 AFTER INSERT ON Departments
 FOR EACH ROW
@@ -196,12 +186,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_department_deleted; //
-
 CREATE TRIGGER trg_notify_department_deleted
 AFTER DELETE ON Departments
 FOR EACH ROW
@@ -220,18 +204,7 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-
-#--------------------------------------
-
-USE hms;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_admission_created; //
-DROP TRIGGER IF EXISTS trg_prevent_duplicate_open_admission; //
-DROP TRIGGER IF EXISTS trg_notify_admission_confirmed; //
+-- Chavi --
 
 CREATE TRIGGER trg_prevent_duplicate_open_admission
 BEFORE INSERT ON Admissions
@@ -261,8 +234,6 @@ BEGIN
     END IF;
 END //
 
-DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment; //
-
 CREATE TRIGGER trg_prevent_duplicate_admission_assignment
 BEFORE UPDATE ON Admissions
 FOR EACH ROW
@@ -286,8 +257,6 @@ BEGIN
         END IF;
     END IF;
 END //
-
-DROP TRIGGER IF EXISTS trg_notify_admission_inserted; //
 
 CREATE TRIGGER trg_notify_admission_inserted
 AFTER INSERT ON Admissions
@@ -330,6 +299,330 @@ BEGIN
         ),
         NOW()
     );
+END //
+
+-- thimira --
+
+CREATE TRIGGER trg_after_stock_receipt_insert
+AFTER INSERT ON Stock_Receipts
+FOR EACH ROW
+BEGIN
+    UPDATE Medicines
+    SET 
+        stock_qty = stock_qty + NEW.quantity,
+        expiry_date = COALESCE(NEW.expiry_date, expiry_date),
+        is_active = TRUE
+    WHERE medicine_id = NEW.medicine_id;
+
+    INSERT INTO Audit_Logs (actor_id, action_type, resource_table, details, timestamp)
+    VALUES (
+        NEW.received_by,
+        'STOCK_RECEIVED',
+        'Medicines',
+        JSON_OBJECT(
+            'medicine_id', NEW.medicine_id,
+            'received_qty', NEW.quantity,
+            'receipt_id', NEW.receipt_id
+        ),
+        NOW()
+    );
+END //
+
+CREATE TRIGGER trg_before_dispensation_insert
+BEFORE INSERT ON Dispensations
+FOR EACH ROW
+BEGIN
+    DECLARE current_stock INT DEFAULT 0;
+
+    SELECT stock_qty INTO current_stock
+    FROM Medicines
+    WHERE medicine_id = NEW.medicine_id;
+
+    IF current_stock < NEW.quantity THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Insufficient stock available for this medication';
+    END IF;
+END //
+
+CREATE TRIGGER trg_after_dispensation_insert
+AFTER INSERT ON Dispensations
+FOR EACH ROW
+BEGIN
+    DECLARE remaining_stock INT;
+    DECLARE reorder_lvl INT;
+    DECLARE med_title VARCHAR(100);
+
+    UPDATE Medicines
+    SET stock_qty = stock_qty - NEW.quantity
+    WHERE medicine_id = NEW.medicine_id;
+
+    SELECT stock_qty, reorder_level, med_name 
+    INTO remaining_stock, reorder_lvl, med_title
+    FROM Medicines
+    WHERE medicine_id = NEW.medicine_id;
+
+    IF remaining_stock <= reorder_lvl THEN
+        INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+        VALUES (
+            'Low Stock Alert',
+            CONCAT('Warning: Medicine "', med_title, '" stock is low (Remaining: ', remaining_stock, ', Threshold: ', reorder_lvl, ').'),
+            'LOW_STOCK',
+            'pharmacist',
+            JSON_OBJECT(
+                'medicine_id', NEW.medicine_id,
+                'remaining_stock', remaining_stock,
+                'reorder_level', reorder_lvl
+            ),
+            NOW()
+        );
+    END IF;
+END //
+
+CREATE TRIGGER trg_check_po_delivery_lead_time
+BEFORE INSERT ON Purchase_Orders
+FOR EACH ROW
+BEGIN
+    IF NEW.expected_delivery_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Restock lead time must be at least 1 day. Expected delivery date must be at least 1 day in advance.';
+    END IF;
+END //
+
+CREATE TRIGGER trg_check_po_receive_lead_time
+BEFORE UPDATE ON Purchase_Orders
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'RECEIVED' AND OLD.status != 'RECEIVED' THEN
+        IF DATEDIFF(CURDATE(), DATE(OLD.order_date)) < 1 AND CURDATE() < OLD.expected_delivery_date THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot confirm stock receipt before 1 day from the order date. The order is still in transit from the supplier.';
+        END IF;
+    END IF;
+END //
+
+
+
+
+-- ishan --
+
+-- This trigger:
+--   1. Creates an audit log for the discharge request.
+--   2. Records the doctor who authorized the request.
+--   3. Stores the admission ID, discharge ID, and status.
+CREATE TRIGGER trg_discharge_after_insert
+AFTER INSERT ON discharges
+FOR EACH ROW
+BEGIN
+    INSERT INTO audit_logs (
+        actor_id,
+        action_type,
+        resource_table,
+        details
+    )
+    VALUES (
+        NEW.discharge_authorized_by,
+        'DISCHARGE_REQUEST',
+        'admissions',
+        JSON_OBJECT(
+            'admission_id', NEW.admission_id,
+            'discharge_id', NEW.discharge_id,
+            'status', NEW.status
+        )
+    );
+END //
+
+-- It writes one line in audit_logs: who created the
+-- record and which record it was.
+-- =====================================================
+CREATE TRIGGER trg_medical_record_after_insert
+AFTER INSERT ON medical_records
+FOR EACH ROW
+BEGIN
+  DECLARE v_user_id INT;
+
+  -- find the doctor's login id from the staff id
+  SELECT user_id INTO v_user_id FROM staff WHERE staff_id = NEW.doctor_id;
+
+  -- write the log line
+  INSERT INTO audit_logs (actor_id, action_type, resource_table, details)
+  VALUES (v_user_id, 'MEDICAL_RECORD_CREATED', 'medical_records',
+          JSON_OBJECT('record_id', NEW.record_id,
+                      'patient_id', NEW.patient_id,
+                      'apt_id', NEW.apt_id));
+END //
+
+-- WHY:  Triggers run by themselves. Nobody calls them.
+-- WHAT: 4 triggers. They keep a history (audit_logs) and notify nurses.
+
+-- 1. After a dose row is added
+-- WHAT: Writes an audit line. A new "Not Given" row with no reason is logged as
+--       DOSE_SCHEDULED, anything else as MEDICATION_ADMINISTERED.
+-- NOTE: This REPLACES the old trigger with the same name.
+CREATE TRIGGER trg_audit_mar_administration
+AFTER INSERT ON medication_administration_records
+FOR EACH ROW
+BEGIN
+  INSERT INTO audit_logs (actor_id, action_type, resource_table, details, timestamp)
+  VALUES (
+    NEW.administered_by,
+    IF(NEW.status = 'Not Given' AND TRIM(COALESCE(NEW.reason, '')) = '',
+       'DOSE_SCHEDULED', 'MEDICATION_ADMINISTERED'),
+    'Medication_Administration_Records',
+    JSON_OBJECT(
+      'mar_id', NEW.mar_id,
+      'rx_id', NEW.rx_id,
+      'patient_id', NEW.patient_id,
+      'status', NEW.status,
+      'reason', NEW.reason,
+      'notes', NEW.notes,
+      'administered_at', NEW.administered_at
+    ),
+    NOW()
+  );
+END //
+
+-- 2. Before the nurse changes a dose row
+-- WHAT: If the status becomes Refused or Held, a reason is required (else error).
+--       Also sets administered_at to the real time of the change.
+CREATE TRIGGER trg_mar_before_update
+BEFORE UPDATE ON medication_administration_records
+FOR EACH ROW
+BEGIN
+  IF NEW.status <> OLD.status THEN
+    IF NEW.status IN ('Refused', 'Held')
+       AND TRIM(COALESCE(NEW.reason, '')) = '' THEN
+      SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'A reason is required when a dose is Refused or Held';
+    END IF;
+    SET NEW.administered_at = NOW();
+  END IF;
+END //
+
+-- 3. After the nurse changes a dose row
+-- WHAT: If the status changed, writes an audit line with old status, new status, reason.
+CREATE TRIGGER trg_mar_after_update
+AFTER UPDATE ON medication_administration_records
+FOR EACH ROW
+BEGIN
+  IF NEW.status <> OLD.status THEN
+    INSERT INTO audit_logs (actor_id, action_type, resource_table, details)
+    VALUES (
+      NEW.administered_by,
+      'MEDICATION_STATUS_CHANGED',
+      'Medication_Administration_Records',
+      JSON_OBJECT(
+        'mar_id', NEW.mar_id,
+        'rx_id', NEW.rx_id,
+        'patient_id', NEW.patient_id,
+        'old_status', OLD.status,
+        'new_status', NEW.status,
+        'reason', NEW.reason,
+        'notes', NEW.notes
+      )
+    );
+  END IF;
+END //
+
+-- 4. After a nurse instruction is saved
+-- WHAT: Sends a notification to nurses: "New <type> order for <patient name>."
+CREATE TRIGGER trg_doctor_order_after_insert
+AFTER INSERT ON doctor_orders
+FOR EACH ROW
+BEGIN
+  DECLARE v_name VARCHAR(201);
+
+  SELECT CONCAT(first_name, ' ', last_name)
+  INTO v_name
+  FROM patients
+  WHERE patient_id = NEW.patient_id;
+
+  INSERT INTO notifications (title, message, type, target_role, details)
+  VALUES (
+    'New Doctor Order',
+    CONCAT('New ', NEW.order_type, ' order for ',
+           COALESCE(v_name, CONCAT('patient #', NEW.patient_id)), '.'),
+    'NEW_DOCTOR_ORDER',
+    'nurse',
+    JSON_OBJECT('order_id', NEW.order_id,
+                'patient_id', NEW.patient_id,
+                'order_type', NEW.order_type)
+  );
+END //
+
+-- Logs every new lab order in the audit log.
+CREATE TRIGGER trg_lab_order_after_insert
+AFTER INSERT ON Lab_Orders
+FOR EACH ROW
+BEGIN
+    DECLARE v_actor_id INT;
+
+    SELECT user_id
+    INTO v_actor_id
+    FROM Staff
+    WHERE staff_id = NEW.doctor_id
+    LIMIT 1;
+
+    INSERT INTO Audit_Logs (
+        actor_id,
+        action_type,
+        resource_table,
+        details,
+        timestamp
+    )
+    VALUES (
+        v_actor_id,
+        'LAB_ORDER_CREATED',
+        'Lab_Orders',
+        JSON_OBJECT(
+            'lab_id', NEW.lab_id,
+            'patient_id', NEW.patient_id,
+            'doctor_id', NEW.doctor_id,
+            'test_type', NEW.test_type,
+            'status', NEW.status
+        ),
+        NOW()
+    );
+END //
+
+-- Logs when a lab order changes from Pending to Completed.
+CREATE TRIGGER trg_lab_order_pending_to_completed
+AFTER UPDATE ON Lab_Orders
+FOR EACH ROW
+BEGIN
+    DECLARE v_actor_id INT;
+
+    IF OLD.status = 'Pending'
+       AND NEW.status = 'Completed' THEN
+
+        SELECT user_id
+        INTO v_actor_id
+        FROM Staff
+        WHERE staff_id = NEW.doctor_id
+        LIMIT 1;
+
+        INSERT INTO Audit_Logs (
+            actor_id,
+            action_type,
+            resource_table,
+            details,
+            timestamp
+        )
+        VALUES (
+            v_actor_id,
+            'LAB_RESULT_COMPLETED',
+            'Lab_Orders',
+            JSON_OBJECT(
+                'lab_id', NEW.lab_id,
+                'patient_id', NEW.patient_id,
+                'doctor_id', NEW.doctor_id,
+                'test_type', NEW.test_type,
+                'old_status', OLD.status,
+                'new_status', NEW.status,
+                'results_text', COALESCE(NEW.results_text, '')
+            ),
+            NOW()
+        );
+    END IF;
 END //
 
 DELIMITER ;

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Optional, Union
 from pydantic import BaseModel, field_validator
 
@@ -20,6 +20,24 @@ class DoctorAppointmentResponse(BaseModel):
     def serialize_time_slot(cls, v: Any) -> str:
         if v is None:
             return ""
+        return str(v)
+
+
+class DoctorCurrentScheduleResponse(BaseModel):
+    appointment_date: date
+    appointment_time: str
+    slot_status: str
+    apt_id: Optional[int] = None
+    patient_name: Optional[str] = None
+    appointment_status: Optional[str] = None
+
+    @field_validator('appointment_time', 'slot_status', mode='before')
+    @classmethod
+    def serialize_schedule_text(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        if isinstance(v, (bytes, bytearray)):
+            return v.decode('utf-8', errors='replace')
         return str(v)
 
 
@@ -112,6 +130,69 @@ class PatientAppointmentDetailsResponse(BaseModel):
     reason: str
 
 
+class CurrentAdmittedPatientResponse(BaseModel):
+    admission_id: int
+    patient_id: int
+    patient_name: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    ward_name: Optional[str] = None
+    bed_number: Optional[str] = None
+    admission_reason: Optional[str] = None
+    admitted_at: Optional[str] = None
+    status: str
+
+    @field_validator("admitted_at", mode="before")
+    @classmethod
+    def serialize_admitted_at(cls, value: Any) -> Optional[str]:
+        return str(value) if value is not None else None
+
+
+class LabOrderPatientDetailsResponse(BaseModel):
+    patient_id: int
+    patient_name: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    appointment_id: int
+    appointment_date: date
+    appointment_status: str
+
+
+class CreateLabOrderRequest(BaseModel):
+    patient_id: int
+    doctor_user_id: int
+    test_type: str
+
+
+class CreateLabOrderResponse(BaseModel):
+    lab_id: int
+    patient_id: int
+    doctor_id: int
+    test_type: str
+    status: str
+    results_text: str
+
+
+class PatientLabResultResponse(BaseModel):
+    lab_id: int
+    patient_id: int
+    patient_name: str
+    age: Optional[int] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    doctor_id: Optional[int] = None
+    doctor_name: Optional[str] = None
+    test_type: str
+    status: str
+    result: str
+    ordered_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 class AdmissionStatusResponse(BaseModel):
     is_admitted: bool
     admission: Optional[dict[str, Any]] = None
@@ -129,3 +210,73 @@ class CreateAdmissionRequest(BaseModel):
 class AdmissionRequestResponse(BaseModel):
     message: str
     admission_id: int
+
+
+class DischargeRequest(BaseModel):
+    admission_id: int
+    doctor_id: int
+    notes: str
+
+
+class DischargeRequestResponse(BaseModel):
+    message: str
+
+
+class CompleteAppointmentRequest(BaseModel):
+    appointment_id: int
+    doctor_id: int
+
+
+class CompleteAppointmentResponse(BaseModel):
+    message: str
+
+
+class DoctorMedicineResponse(BaseModel):
+    medicine_id: int
+    med_name: str
+    generic_name: Optional[str] = None
+
+
+class PrescriptionMedicineRequest(BaseModel):
+    medicine_id: int
+    dose: str
+    frequency: str
+    duration: str
+
+
+class CreatePrescriptionRequest(BaseModel):
+    patient_id: int
+    apt_id: int
+    doctor_id: int
+    diagnosis: str
+    clinical_notes: Optional[str] = None
+    medicines: list[PrescriptionMedicineRequest]
+
+
+class CreatePrescriptionResponse(BaseModel):
+    message: str
+    record_id: int
+
+
+class AdmittedPrescriptionMedicineRequest(BaseModel):
+    medicine_id: int
+    dose: str
+    frequency: str
+    duration: str
+    first_dose: str
+    notes: str | None = None
+
+
+class NurseOrderRequest(BaseModel):
+    order_type: str
+    instruction: str
+
+
+class CreateAdmittedPrescriptionRequest(BaseModel):
+    patient_id: int
+    apt_id: int
+    doctor_id: int
+    diagnosis: str
+    clinical_notes: str | None = None
+    medicines: list[AdmittedPrescriptionMedicineRequest]
+    nurse_orders: list[NurseOrderRequest] = []

@@ -2,11 +2,15 @@ import logging
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, Depends, status
 import mysql.connector
-from app.core.security import security_bearer, decode_token
+from app.core.security import security_bearer, decode_token, get_current_user_payload
 from app.schema.Patient.patient_schema import (
     DoctorDepartmentResponse,
     BookAppointmentRequest,
     BookAppointmentResponse,
+    PatientProfileUpdate,
+    PatientProfileResponse,
+    PatientPrescriptionResponse,
+    PatientMedicalRecordResponse,
 )
 from app.services.Patient import patient_service
 
@@ -87,5 +91,60 @@ def book_appointment(
         error_msg = getattr(e, "msg", str(e))
         is_val_err = any(k in error_msg for k in ("Appointment", "Doctor", "Department", "Patient"))
         raise HTTPException(status_code=400 if is_val_err else 500, detail=error_msg)
+
+
+@router.put("/profile", response_model=PatientProfileResponse, status_code=status.HTTP_200_OK)
+def update_patient_profile(
+    payload: PatientProfileUpdate,
+    token_payload: dict = Depends(get_current_user_payload)
+):
+    """Edit patient profile details (name, dob, emergency contact, email).
+    Medical details such as blood group and allergies cannot be updated.
+    """
+    role = str(token_payload.get("role", "")).lower()
+    if role != "patient":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only patients can edit their profile details")
+    try:
+        user_id = int(token_payload["sub"])
+        return patient_service.update_patient_profile(user_id, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except mysql.connector.IntegrityError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Database constraint error: duplicate entry or invalid input")
+    except Exception as e:
+        logger.exception("Failed to update patient profile: %s", e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get("/prescriptions/{patient_id}", response_model=List[PatientPrescriptionResponse], status_code=status.HTTP_200_OK)
+def get_patient_prescriptions(
+    patient_id: int,
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status ('Active' or 'Inactive')"),
+    credentials = Depends(security_bearer),
+):
+    """Retrieve only prescriptions for a patient without medical record fields."""
+    try:
+        return patient_service.get_patient_prescriptions(patient_id, status_filter=status_filter)
+    except Exception as e:
+        logger.exception("Failed to retrieve patient prescriptions: %s", e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get("/medical-records/{patient_id}", response_model=List[PatientMedicalRecordResponse], status_code=status.HTTP_200_OK)
+def get_patient_medical_records(
+    patient_id: int,
+    credentials = Depends(security_bearer),
+):
+    """Retrieve all medical records for a patient by patient_id or user_id."""
+    try:
+        return patient_service.get_patient_medical_records(patient_id)
+    except Exception as e:
+        logger.exception("Failed to retrieve patient medical records: %s", e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+
+
+
 
 

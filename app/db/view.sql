@@ -1,4 +1,4 @@
-USE hms;
+-- TG/1407 --
 
 CREATE OR REPLACE VIEW vw_department_workload AS
 WITH DeptStats AS (
@@ -102,13 +102,36 @@ SELECT
     ) AS actor,
     a.action_type AS action,
     COALESCE(a.resource_table, 'System') AS resource,
-    fn_get_audit_risk(a.action_type, a.details) AS risk,
+    CASE
+        WHEN JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.risk')) IS NOT NULL 
+             AND UPPER(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.risk'))) IN ('HIGH', 'MEDIUM', 'LOW')
+            THEN UPPER(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.risk')))
+        WHEN UPPER(COALESCE(a.action_type, '')) LIKE '%DELETE%' 
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%DROP%' 
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%REVOKE%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%PURGE%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%UNAUTHORIZED%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%BREACH%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%FAIL%'
+            THEN 'HIGH'
+        WHEN UPPER(COALESCE(a.action_type, '')) LIKE '%UPDATE%' 
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%MODIFY%' 
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%PASSWORD%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%ROLE%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%STATUS%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%USER%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%DIAGNOSIS%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%PRESCRIPTION%'
+             OR UPPER(COALESCE(a.action_type, '')) LIKE '%CREATE%'
+            THEN 'MEDIUM'
+        ELSE 'LOW'
+    END AS risk,
     a.details
 FROM Audit_Logs a
 LEFT JOIN Users u ON a.actor_id = u.user_id
 LEFT JOIN Staff s ON u.user_id = s.user_id;
 
-USE hms;
+-- Chavi -- 
 
 CREATE OR REPLACE VIEW vw_recep_appointments AS
 SELECT a.apt_id, a.patient_id,
@@ -122,3 +145,180 @@ FROM Appointments a
 JOIN Patients p ON p.patient_id = a.patient_id
 JOIN Staff s ON s.staff_id = a.doctor_id
 JOIN Departments d ON d.dept_id = a.dept_id;
+
+
+-- thimira --
+
+CREATE OR REPLACE VIEW vw_medicine_inventory AS
+SELECT 
+    m.medicine_id,
+    m.med_name,
+    m.generic_name,
+    m.unit_price,
+    m.stock_qty,
+    m.reorder_level,
+    m.expiry_date,
+    DATEDIFF(m.expiry_date, CURDATE()) AS days_to_expiry,
+    fn_calculate_medicine_status(m.stock_qty, m.reorder_level, m.expiry_date) AS stock_status,
+    (m.unit_price * m.stock_qty) AS inventory_value,
+    m.is_active,
+    m.created_at,
+    m.updated_at
+FROM Medicines m;
+
+CREATE OR REPLACE VIEW vw_near_expiry_alerts AS
+SELECT 
+    m.medicine_id,
+    m.med_name,
+    m.generic_name,
+    m.stock_qty,
+    m.unit_price,
+    m.expiry_date,
+    DATEDIFF(m.expiry_date, CURDATE()) AS days_remaining,
+    CASE 
+        WHEN m.expiry_date <= CURDATE() THEN 'EXPIRED'
+        ELSE 'EXPIRING_SOON'
+    END AS urgency_level
+FROM Medicines m
+WHERE m.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+  AND m.is_active = TRUE
+ORDER BY m.expiry_date ASC;
+
+CREATE OR REPLACE VIEW vw_daily_dispensing_summary AS
+SELECT 
+    DATE(d.dispensed_at) AS dispense_date,
+    COUNT(d.dispense_id) AS total_transactions,
+    SUM(d.quantity) AS total_units_dispensed,
+    SUM(d.quantity * d.unit_price_at_sale) AS total_revenue,
+    COUNT(DISTINCT d.pharmacist_id) AS pharmacists_on_duty,
+    GROUP_CONCAT(DISTINCT m.med_name ORDER BY m.med_name SEPARATOR ', ') AS medicine_names,
+    GROUP_CONCAT(DISTINCT CONCAT(m.med_name, ' (', d.quantity, ' units)') ORDER BY m.med_name SEPARATOR ', ') AS medicines_detail
+FROM Dispensations d
+LEFT JOIN Medicines m ON d.medicine_id = m.medicine_id
+GROUP BY DATE(d.dispensed_at)
+ORDER BY dispense_date DESC;
+
+
+
+
+-- ishan --
+
+-- ------------- doctor -------------------
+
+-- get all wards
+CREATE OR REPLACE VIEW vw_ward_names AS
+SELECT ward_name
+FROM wards
+ORDER BY ward_name;
+
+-- get all admissions data
+CREATE OR REPLACE VIEW vw_admissions_data AS
+SELECT admission_id, patient_id, ward_id, bed_id, admitted_doctor_id, admitted_by,
+       admitted_at, admission_reason, guardian_name, guardian_relationship,
+       guardian_contact, gender, status
+FROM admissions;
+
+-- Medicine list for the doctor's dropdown.
+-- Returns the id, name and generic name of every medicine,
+-- sorted by name.
+-- =====================================================
+CREATE OR REPLACE VIEW vw_doctor_medicine_list AS
+SELECT medicine_id, med_name, generic_name
+FROM medicines
+ORDER BY med_name;
+
+-- Gets patient and appointment details for the doctor's lab-order page.
+CREATE OR REPLACE VIEW vw_lab_order_patient_details AS
+SELECT
+    p.patient_id,
+    CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+    TIMESTAMPDIFF(YEAR, p.dob, CURDATE()) AS age,
+    p.blood_group,
+    COALESCE(NULLIF(TRIM(p.allergies), ''), 'None') AS allergies,
+    a.apt_id AS appointment_id,
+    a.apt_date AS appointment_date,
+    a.status AS appointment_status
+FROM Patients AS p
+INNER JOIN Appointments AS a
+    ON a.patient_id = p.patient_id;
+
+-- =========================================================
+-- VIEW: CURRENTLY ADMITTED PATIENTS
+-- =========================================================
+-- Returns all patients whose admission status is 'Admitted'.
+-- Bed information is optional because the current Admissions
+-- table allows bed_id to be NULL.
+-- =========================================================
+CREATE OR REPLACE VIEW vw_current_admitted_patients AS
+SELECT
+    a.admission_id,
+    p.patient_id,
+
+    CONCAT(
+        p.first_name,
+        ' ',
+        p.last_name
+    ) AS patient_name,
+
+    TIMESTAMPDIFF(
+        YEAR,
+        p.dob,
+        CURRENT_DATE
+    ) AS age,
+
+    a.gender,
+
+    COALESCE(
+        p.blood_group,
+        'Not recorded'
+    ) AS blood_group,
+
+    COALESCE(
+        NULLIF(TRIM(p.allergies), ''),
+        'None recorded'
+    ) AS allergies,
+
+    COALESCE(
+        w.ward_name,
+        'Ward not assigned'
+    ) AS ward_name,
+
+    COALESCE(
+        b.bed_number,
+        'Bed not assigned'
+    ) AS bed_number,
+
+    a.admission_reason,
+    a.admitted_at,
+    a.status
+
+FROM Admissions AS a
+
+INNER JOIN Patients AS p
+    ON p.patient_id = a.patient_id
+
+LEFT JOIN Wards AS w
+    ON w.ward_id = a.ward_id
+
+LEFT JOIN Beds AS b
+    ON b.bed_id = a.bed_id
+
+WHERE a.status = 'Admitted'
+
+ORDER BY
+    a.admitted_at DESC;
+
+-- ----------------------- patient ------------------------------------------
+
+CREATE OR REPLACE VIEW vw_doctor_departments AS
+SELECT
+    s.staff_id                                AS doctor_id,
+    CONCAT(s.first_name, ' ', s.last_name)    AS doctor_name,
+    s.specialty,
+    d.dept_id,
+    d.dept_name                               AS department_name,
+    u.is_active
+FROM staff s
+JOIN users u        ON u.user_id = s.user_id
+JOIN departments d  ON d.dept_id = s.dept_id
+WHERE u.role = 'doctor';
