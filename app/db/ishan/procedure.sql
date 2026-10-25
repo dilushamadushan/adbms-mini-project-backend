@@ -736,6 +736,125 @@ DELIMITER ;
 
 
 
+
+
+
+-- =========================================================
+-- PROCEDURE: GET CURRENT DAY SCHEDULE FOR A DOCTOR
+-- =========================================================
+
+
+-- Notes:
+--   - The procedure automatically uses CURRENT_DATE.
+--   - It returns both booked and open slots.
+--   - Appointment slots are generated from 09:00 AM to 04:30 PM.
+--   - The lunch period from 12:00 PM to 12:30 PM is excluded.
+
+
+DELIMITER //
+
+-- Remove the old version before creating the updated procedure.
+DROP PROCEDURE IF EXISTS sp_get_doctor_current_schedule //
+
+CREATE PROCEDURE sp_get_doctor_current_schedule(
+    IN p_doctor_id INT
+)
+BEGIN
+
+    -- =====================================================
+    -- Validate that the supplied doctor exists.
+    -- =====================================================
+    IF NOT EXISTS (
+        SELECT 1
+        FROM Staff
+        WHERE staff_id = p_doctor_id
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Doctor not found.';
+    END IF;
+
+
+    -- =====================================================
+    -- Define the standard clinic appointment slots.
+    -- =====================================================
+    WITH ClinicSlots AS (
+
+        -- Morning appointment slots
+        SELECT TIME('09:00:00') AS slot_time
+        UNION ALL SELECT TIME('09:30:00')
+        UNION ALL SELECT TIME('10:00:00')
+        UNION ALL SELECT TIME('10:30:00')
+        UNION ALL SELECT TIME('11:00:00')
+        UNION ALL SELECT TIME('11:30:00')
+
+        -- Afternoon appointment slots
+        UNION ALL SELECT TIME('13:00:00')
+        UNION ALL SELECT TIME('13:30:00')
+        UNION ALL SELECT TIME('14:00:00')
+        UNION ALL SELECT TIME('14:30:00')
+        UNION ALL SELECT TIME('15:00:00')
+        UNION ALL SELECT TIME('15:30:00')
+        UNION ALL SELECT TIME('16:00:00')
+        UNION ALL SELECT TIME('16:30:00')
+    )
+
+
+    -- =====================================================
+    -- Return today's complete schedule.
+    -- =====================================================
+    SELECT
+
+        -- Current database date
+        CURRENT_DATE AS appointment_date,
+
+        -- Convert the slot time into a readable format
+        TIME_FORMAT(
+            slots.slot_time,
+            '%h:%i %p'
+        ) AS appointment_time,
+
+        -- Identify whether the slot is booked or available
+        CASE
+            WHEN appointments.apt_id IS NULL THEN 'OPEN'
+            ELSE 'BOOKED'
+        END AS slot_status,
+
+        -- Return the patient's full name for booked slots
+        CASE
+            WHEN appointments.apt_id IS NULL THEN NULL
+            ELSE CONCAT(
+                patients.first_name,
+                ' ',
+                patients.last_name
+            )
+        END AS patient_name,
+
+        -- Return the appointment status
+        appointments.status AS appointment_status
+
+    FROM ClinicSlots AS slots
+
+    -- Match the clinic slots with today's doctor appointments
+    LEFT JOIN Appointments AS appointments
+        ON appointments.doctor_id = p_doctor_id
+        AND appointments.apt_date = CURRENT_DATE
+        AND appointments.time_slot = slots.slot_time
+        AND appointments.status = 'Scheduled'
+
+    -- Get patient information for booked appointments
+    LEFT JOIN Patients AS patients
+        ON patients.patient_id = appointments.patient_id
+
+    -- Display the schedule in chronological order
+    ORDER BY slots.slot_time ASC;
+
+END //
+
+DELIMITER ;
+
+
+
+
 -----------------------patient------------------------------------------
 
 

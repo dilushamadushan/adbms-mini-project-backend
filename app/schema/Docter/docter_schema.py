@@ -23,6 +23,24 @@ class DoctorAppointmentResponse(BaseModel):
         return str(v)
 
 
+class DoctorCurrentScheduleResponse(BaseModel):
+    appointment_date: date
+    appointment_time: str
+    slot_status: str
+    apt_id: Optional[int] = None
+    patient_name: Optional[str] = None
+    appointment_status: Optional[str] = None
+
+    @field_validator('appointment_time', 'slot_status', mode='before')
+    @classmethod
+    def serialize_schedule_text(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        if isinstance(v, (bytes, bytearray)):
+            return v.decode('utf-8', errors='replace')
+        return str(v)
+
+
 class DoctorUpcomingAppointmentResponse(BaseModel):
     apt_id: int
     patient_id: int
@@ -110,6 +128,26 @@ class PatientAppointmentDetailsResponse(BaseModel):
     apt_date: str
     apt_time: str
     reason: str
+
+
+class CurrentAdmittedPatientResponse(BaseModel):
+    admission_id: int
+    patient_id: int
+    patient_name: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    ward_name: Optional[str] = None
+    bed_number: Optional[str] = None
+    admission_reason: Optional[str] = None
+    admitted_at: Optional[str] = None
+    status: str
+
+    @field_validator("admitted_at", mode="before")
+    @classmethod
+    def serialize_admitted_at(cls, value: Any) -> Optional[str]:
+        return str(value) if value is not None else None
 
 
 class LabOrderPatientDetailsResponse(BaseModel):

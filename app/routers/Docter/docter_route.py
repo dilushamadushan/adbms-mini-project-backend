@@ -22,12 +22,27 @@ from app.schema.Docter.docter_schema import (
     CreateLabOrderRequest,
     CreateLabOrderResponse,
     PatientLabResultResponse,
+    DoctorCurrentScheduleResponse,
+    CurrentAdmittedPatientResponse,
 )
 from app.services.Docter import docter_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/doctor", tags=["Doctor"])
+
+
+@router.get(
+    "/current-admitted",
+    response_model=List[CurrentAdmittedPatientResponse],
+)
+def get_current_admitted_patients():
+    try:
+        return docter_service.get_current_admitted_patients()
+    except Exception as e:
+        logger.exception("Failed to get currently admitted patients: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to get currently admitted patients")
+
 
 @router.get("/medicines", response_model=List[DoctorMedicineResponse])
 def get_doctor_medicines():
@@ -139,6 +154,34 @@ def get_appointments_by_doctor(doctor_id: int):
     except Exception as e:
         logger.exception("Failed to load doctor appointments: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/current-schedule/{doctor_id}",
+    response_model=List[DoctorCurrentScheduleResponse],
+)
+def get_doctor_current_schedule(doctor_id: int):
+    try:
+        return docter_service.get_doctor_current_schedule(doctor_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to load current doctor schedule: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to load current doctor schedule")
+
+
+@router.get(
+    "/current-schedule-by-user/{user_id}",
+    response_model=List[DoctorCurrentScheduleResponse],
+)
+def get_doctor_current_schedule_by_user(user_id: int):
+    try:
+        return docter_service.get_doctor_current_schedule_by_user(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("Failed to load current doctor schedule by user")
+        raise HTTPException(status_code=500, detail="Failed to load current doctor schedule")
 
 
 @router.get("/appointment-count/{doctor_id}" , response_model=int)

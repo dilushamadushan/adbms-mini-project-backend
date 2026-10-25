@@ -91,6 +91,29 @@ def list_appointments_by_doctor(doctor_id: int):
             raise ValueError("Doctor not found")
         return docter_repo.get_appointments_by_doctor(conn, doctor_id)
 
+
+def get_doctor_current_schedule(doctor_id: int):
+    try:
+        with get_db() as conn:
+            if not docter_repo.staff_doctor_exists(conn, doctor_id):
+                raise ValueError("Doctor not found")
+            return docter_repo.get_doctor_current_schedule(conn, doctor_id)
+    except mysql.connector.Error as err:
+        if err.sqlstate == "45000":
+            raise ValueError(err.msg) from err
+        raise
+
+
+def get_doctor_current_schedule_by_user(user_id: int):
+    try:
+        with get_db() as conn:
+            return docter_repo.get_doctor_current_schedule_by_user(conn, user_id)
+    except mysql.connector.Error as err:
+        if err.sqlstate == "45000":
+            raise ValueError(err.msg) from err
+        raise
+
+
 def get_appointment_count(doctor_id: int):
     with get_db() as conn:
         if not docter_repo.doctor_exists(conn, doctor_id):
@@ -147,6 +170,11 @@ def get_patient_appointment_details(appointment_id: int):
 def get_ward_names():
     with get_db() as conn:
         return docter_repo.get_ward_names(conn)
+
+
+def get_current_admitted_patients():
+    with get_db() as conn:
+        return docter_repo.get_current_admitted_patients(conn)
 
 
 def create_admission_request(

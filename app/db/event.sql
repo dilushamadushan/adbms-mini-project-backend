@@ -4,6 +4,12 @@ DROP EVENT IF EXISTS ev_check_expired_medicines;
 DROP EVENT IF EXISTS ev_daily_low_stock_alert;
 DROP EVENT IF EXISTS ev_weekly_stale_orders_cleanup;
 
+
+DROP EVENT IF EXISTS ev_deactivate_finished_prescriptions;
+DROP EVENT IF EXISTS ev_remind_unacknowledged_orders;
+
+
+
 DELIMITER //
 
 -- TG/1407 --
@@ -112,5 +118,58 @@ BEGIN
     WHERE status IN ('PENDING_APPROVAL', 'DRAFT')
       AND order_date < DATE_SUB(CURDATE(), INTERVAL 60 DAY);
 END //
+
+
+
+
+-- ishan --
+
+-- Changes Active medicines to Inactive when their
+-- duration is over (for example "3 days" have passed
+-- since the prescription was saved).
+-- It understands durations like "5 days" or "1 month".
+-- =====================================================
+CREATE EVENT ev_deactivate_finished_prescriptions
+ON SCHEDULE EVERY 1 DAY
+STARTS (TIMESTAMP(CURDATE()) + INTERVAL 1 DAY + INTERVAL 1 HOUR)
+DO
+BEGIN
+    UPDATE prescriptions
+    SET status = 'Inactive'
+    WHERE status = 'Active'
+      AND duration REGEXP '^[0-9]+ (day|days|month|months)$'
+      AND created_at + INTERVAL (
+            CAST(SUBSTRING_INDEX(duration, ' ', 1) AS UNSIGNED)
+            * IF(duration LIKE '%month%', 30, 1)    -- 1 month counts as 30 days
+          ) DAY < NOW();
+END //
+
+-- WHY:  Nurses may forget a new doctor order.
+-- WHAT: Runs by itself every 30 minutes. Finds orders still Pending after 1 hour
+--       and sends a reminder to nurses. Each order gets only ONE reminder.
+-- NOTE: The event scheduler must be ON (it is set at the end of this script).
+CREATE EVENT ev_remind_unacknowledged_orders
+ON SCHEDULE EVERY 30 MINUTE
+DO
+BEGIN
+    INSERT INTO notifications (title, message, type, target_role, details)
+    SELECT
+        'Doctor Order Not Acknowledged',
+        CONCAT('Order #', o.order_id, ' (', o.order_type, ') for patient #',
+               o.patient_id, ' is still Pending.'),
+        'ORDER_PENDING_REMINDER',
+        'nurse',
+        JSON_OBJECT('order_id', o.order_id, 'patient_id', o.patient_id)
+    FROM doctor_orders o
+    WHERE o.status = 'Pending'
+      AND o.created_at < NOW() - INTERVAL 1 HOUR
+      AND NOT EXISTS (
+          SELECT 1
+          FROM notifications n
+          WHERE n.type = 'ORDER_PENDING_REMINDER'
+            AND CAST(JSON_UNQUOTE(JSON_EXTRACT(n.details, '$.order_id')) AS UNSIGNED) = o.order_id
+      );
+END //
+SET GLOBAL event_scheduler = ON;
 
 DELIMITER ;
