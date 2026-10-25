@@ -1,7 +1,19 @@
 from fastapi import APIRouter, Response, status
 
 from app.core.database import ping_db
-from app.routers.user_route import router as user_router
+from app.routers.auth_route import router as auth_router
+from app.routers.user_route import router as user_router, staff_router
+from app.routers.department_route import router as department_router
+from app.routers.report_route import router as report_router
+from app.routers.audit_route import router as audit_router
+from app.routers.notification_route import router as notification_router
+from app.routers.Docter.docter_route import router as docter_router
+from app.routers.Patient.patient_route import router as patient_router
+from app.routers.appointment_route import router as appointment_router
+from app.routers.Nurse.nurse_route import router as nurse_router
+from app.routers.recep_route import router as recep_router
+from app.routers.pharmacy_route import router as pharmacy_router
+
 
 router = APIRouter()
 
@@ -15,5 +27,18 @@ def health_check(response: Response):
         return {'status': 'error', 'database': 'unhealthy'}
 
 
-# Include all your modular routers here
+router.include_router(auth_router)
 router.include_router(user_router)
+router.include_router(staff_router)
+router.include_router(department_router)
+router.include_router(report_router)
+router.include_router(audit_router)
+router.include_router(notification_router)
+
+router.include_router(docter_router)
+router.include_router(patient_router)
+router.include_router(appointment_router)
+router.include_router(nurse_router)
+router.include_router(recep_router)
+router.include_router(pharmacy_router)
+
