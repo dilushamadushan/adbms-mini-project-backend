@@ -56,3 +56,67 @@ def book_appointment(
         )
 
 
+def update_patient_profile(user_id: int, data) -> dict:
+    from app.repositories.user_repo import check_email_exists_excluding_user, get_patient_profile_by_user_id
+    from datetime import date
+
+    with get_db() as conn:
+        existing = get_patient_profile_by_user_id(conn, user_id)
+        if not existing:
+            raise ValueError(f"Patient profile for user ID {user_id} not found")
+
+        patient_updates = {}
+        user_updates = {}
+
+        if data.first_name is not None:
+            first_name = data.first_name.strip()
+            if not first_name:
+                raise ValueError("First name cannot be empty")
+            patient_updates["first_name"] = first_name
+
+        if data.last_name is not None:
+            last_name = data.last_name.strip()
+            if not last_name:
+                raise ValueError("Last name cannot be empty")
+            patient_updates["last_name"] = last_name
+
+        if data.dob is not None:
+            if data.dob > date.today():
+                raise ValueError("Date of birth cannot be in the future")
+            patient_updates["dob"] = data.dob
+
+        if data.emergency_contact is not None:
+            patient_updates["emergency_contact"] = data.emergency_contact.strip()
+
+        if data.email is not None:
+            email_clean = str(data.email).strip().lower()
+            if not email_clean:
+                raise ValueError("Email cannot be empty")
+            if check_email_exists_excluding_user(conn, email_clean, user_id):
+                raise ValueError(f"Email '{email_clean}' is already in use by another account")
+            user_updates["email"] = email_clean
+
+        if patient_updates or user_updates:
+            patient_repo.update_patient_profile(conn, user_id, patient_updates, user_updates)
+
+        updated_profile = get_patient_profile_by_user_id(conn, user_id)
+        return updated_profile
+
+
+def get_patient_prescriptions(
+    patient_id: int,
+    status_filter: Optional[str] = None,
+) -> List[dict]:
+    with get_db() as conn:
+        return patient_repo.get_patient_prescriptions(conn, patient_id, status_filter)
+
+
+def get_patient_medical_records(patient_id: int) -> List[dict]:
+    with get_db() as conn:
+        return patient_repo.get_patient_medical_records(conn, patient_id)
+
+
+
+
+
+
