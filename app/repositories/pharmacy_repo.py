@@ -424,23 +424,27 @@ def get_prescriptions_queue(conn: MySQLConnection, status_filter: str = "PENDING
                 p.duration,
                 p.created_at AS prescribed_at,
                 mr.patient_id,
-                CONCAT(pt.first_name, ' ', pt.last_name) AS patient_name,
-                pt.allergies,
-                CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name,
+                COALESCE(NULLIF(TRIM(CONCAT(pt.first_name, ' ', pt.last_name)), ''), 'Hospital Patient') AS patient_name,
+                COALESCE(pt.allergies, 'None') AS allergies,
+                COALESCE(NULLIF(TRIM(CONCAT(doc.first_name, ' ', doc.last_name)), ''), 'Consulting Physician') AS doctor_name,
                 m.medicine_id,
-                m.med_name AS inventory_med_name,
+                COALESCE(m.med_name, p.med_name) AS inventory_med_name,
                 m.stock_qty,
                 m.unit_price,
                 d.dispense_id,
                 IF(d.dispense_id IS NOT NULL, TRUE, FALSE) AS is_dispensed
             FROM Prescriptions p
-            JOIN Medical_Records mr ON p.record_id = mr.record_id
-            JOIN Patients pt ON mr.patient_id = pt.patient_id
-            JOIN Staff doc ON mr.doctor_id = doc.staff_id
+            LEFT JOIN Medical_Records mr ON p.record_id = mr.record_id
+            LEFT JOIN Patients pt ON mr.patient_id = pt.patient_id
+            LEFT JOIN Staff doc ON mr.doctor_id = doc.staff_id
             LEFT JOIN Dispensations d ON p.rx_id = d.rx_id
             LEFT JOIN Medicines m ON (
-                LOWER(m.med_name) LIKE CONCAT('%', LOWER(p.med_name), '%') 
+                LOWER(m.med_name) = LOWER(p.med_name)
+                OR LOWER(m.med_name) LIKE CONCAT('%', LOWER(p.med_name), '%')
                 OR LOWER(p.med_name) LIKE CONCAT('%', LOWER(m.med_name), '%')
+                OR LOWER(m.generic_name) LIKE CONCAT('%', LOWER(p.med_name), '%')
+                OR LOWER(p.med_name) LIKE CONCAT('%', LOWER(m.generic_name), '%')
+                OR LOWER(m.med_name) LIKE CONCAT('%', SUBSTRING_INDEX(LOWER(p.med_name), ' ', 1), '%')
             )
         """
         if status_filter == "PENDING":
@@ -448,7 +452,16 @@ def get_prescriptions_queue(conn: MySQLConnection, status_filter: str = "PENDING
         elif status_filter == "DISPENSED":
             query += " WHERE d.dispense_id IS NOT NULL"
         
-        query += " ORDER BY p.created_at DESC"
+        query += """
+            ORDER BY 
+                p.rx_id DESC,
+                CASE 
+                    WHEN LOWER(m.med_name) = LOWER(p.med_name) THEN 1
+                    WHEN LOWER(m.med_name) LIKE CONCAT(LOWER(p.med_name), '%') THEN 2
+                    WHEN LOWER(p.med_name) LIKE CONCAT(LOWER(m.med_name), '%') THEN 3
+                    ELSE 4
+                END ASC
+        """
         cursor.execute(query)
         rows = cursor.fetchall()
         
@@ -525,20 +538,20 @@ def get_dispensations_history(conn: MySQLConnection, limit: int = 50) -> List[Di
             SELECT 
                 d.dispense_id,
                 d.rx_id,
-                CONCAT(pt.first_name, ' ', pt.last_name) AS patient_name,
-                CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name,
-                m.med_name,
+                COALESCE(NULLIF(TRIM(CONCAT(pt.first_name, ' ', pt.last_name)), ''), 'Hospital Patient') AS patient_name,
+                COALESCE(NULLIF(TRIM(CONCAT(doc.first_name, ' ', doc.last_name)), ''), 'Consulting Physician') AS doctor_name,
+                COALESCE(m.med_name, p.med_name, 'Medication') AS med_name,
                 d.quantity,
                 d.unit_price_at_sale,
                 (d.quantity * d.unit_price_at_sale) AS total_revenue,
                 d.dispensed_at,
                 COALESCE(CONCAT(pharm.first_name, ' ', pharm.last_name), 'Alex Taylor') AS pharmacist_name
             FROM Dispensations d
-            JOIN Prescriptions p ON d.rx_id = p.rx_id
-            JOIN Medical_Records mr ON p.record_id = mr.record_id
-            JOIN Patients pt ON mr.patient_id = pt.patient_id
-            JOIN Staff doc ON mr.doctor_id = doc.staff_id
-            JOIN Medicines m ON d.medicine_id = m.medicine_id
+            LEFT JOIN Prescriptions p ON d.rx_id = p.rx_id
+            LEFT JOIN Medical_Records mr ON p.record_id = mr.record_id
+            LEFT JOIN Patients pt ON mr.patient_id = pt.patient_id
+            LEFT JOIN Staff doc ON mr.doctor_id = doc.staff_id
+            LEFT JOIN Medicines m ON d.medicine_id = m.medicine_id
             LEFT JOIN Staff pharm ON d.pharmacist_id = pharm.staff_id
             ORDER BY d.dispensed_at DESC
             LIMIT %s
