@@ -1,7 +1,4 @@
--- ==============================================================================
--- Pharmacy Management Scheduled Events (Thimira)
--- Module: Supplier Orders, Inventory Expiry & Safety Monitoring
--- ==============================================================================
+
 
 USE hms;
 
@@ -85,3 +82,69 @@ BEGIN
 END //
 
 DELIMITER ;
+
+
+-- ------------------------------------------------------------------------------
+-- 3. Event: ev_daily_low_stock_alert
+-- Runs daily to detect medicines that have dropped below their reorder level.
+-- Pushes stock depletion warning notifications to pharmacists to order fresh supplies.
+-- ------------------------------------------------------------------------------
+DELIMITER //
+
+DROP EVENT IF EXISTS ev_daily_low_stock_alert //
+
+CREATE EVENT ev_daily_low_stock_alert
+ON SCHEDULE EVERY 1 DAY
+STARTS CURRENT_TIMESTAMP
+DO
+BEGIN
+    INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+    SELECT 
+        'Low Stock Warning: Reorder Required',
+        CONCAT('Medication "', med_name, '" is below reorder level (Current: ', stock_qty, ' units, Min: ', reorder_level, '). Please place a purchase order.'),
+        'LOW_STOCK_WARNING',
+        'pharmacist',
+        JSON_OBJECT(
+            'medicine_id', medicine_id, 
+            'med_name', med_name, 
+            'stock_qty', stock_qty, 
+            'reorder_level', reorder_level,
+            'deficit', (reorder_level - stock_qty)
+        ),
+        NOW()
+    FROM Medicines
+    WHERE stock_qty <= reorder_level
+      AND is_active = TRUE
+      AND NOT EXISTS (
+          SELECT 1 FROM Notifications n
+          WHERE n.type = 'LOW_STOCK_WARNING'
+            AND DATE(n.created_at) = CURDATE()
+            AND JSON_EXTRACT(n.details, '$.medicine_id') = Medicines.medicine_id
+      );
+END //
+
+DELIMITER ;
+
+
+-- ------------------------------------------------------------------------------
+-- 4. Event: ev_weekly_stale_orders_cleanup
+-- Runs weekly to maintain database hygiene by auto-cancelling stale purchase orders
+-- that have remained in unapproved draft status for more than 60 days.
+-- ------------------------------------------------------------------------------
+DELIMITER //
+
+DROP EVENT IF EXISTS ev_weekly_stale_orders_cleanup //
+
+CREATE EVENT ev_weekly_stale_orders_cleanup
+ON SCHEDULE EVERY 1 WEEK
+STARTS CURRENT_TIMESTAMP
+DO
+BEGIN
+    UPDATE Purchase_Orders
+    SET status = 'CANCELLED'
+    WHERE status IN ('PENDING_APPROVAL', 'DRAFT')
+      AND order_date < DATE_SUB(CURDATE(), INTERVAL 60 DAY);
+END //
+
+DELIMITER ;
+
