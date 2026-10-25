@@ -207,13 +207,25 @@ def get_daily_dispensing_report(conn: MySQLConnection, start_date: date, end_dat
     try:
         cursor.execute("""
             SELECT 
-                DATE(d.dispensed_at) AS report_date,
-                COUNT(d.dispense_id) AS total_dispensations,
-                COALESCE(SUM(d.quantity), 0) AS total_units,
-                COALESCE(SUM(d.quantity * d.unit_price_at_sale), 0.00) AS total_revenue
-            FROM Dispensations d
-            WHERE DATE(d.dispensed_at) BETWEEN %s AND %s
-            GROUP BY DATE(d.dispensed_at)
+                d_date AS report_date,
+                CAST(SUM(cnt) AS UNSIGNED) AS total_dispensations,
+                CAST(SUM(units) AS UNSIGNED) AS total_units,
+                CAST(SUM(rev) AS DECIMAL(10,2)) AS total_revenue,
+                GROUP_CONCAT(DISTINCT med_name ORDER BY med_name SEPARATOR ', ') AS medicine_names,
+                GROUP_CONCAT(CONCAT(med_name, ' (', units, ' units)') ORDER BY med_name SEPARATOR ', ') AS medicines_detail
+            FROM (
+                SELECT 
+                    DATE(d.dispensed_at) AS d_date,
+                    m.med_name,
+                    COUNT(d.dispense_id) AS cnt,
+                    SUM(d.quantity) AS units,
+                    SUM(d.quantity * d.unit_price_at_sale) AS rev
+                FROM Dispensations d
+                LEFT JOIN Medicines m ON d.medicine_id = m.medicine_id
+                WHERE DATE(d.dispensed_at) BETWEEN %s AND %s
+                GROUP BY DATE(d.dispensed_at), d.medicine_id, m.med_name
+            ) per_med
+            GROUP BY d_date
             ORDER BY report_date DESC
         """, (start_date, end_date))
         return cursor.fetchall()
@@ -424,6 +436,7 @@ def get_prescriptions_queue(conn: MySQLConnection, status_filter: str = "PENDING
                 p.duration,
                 p.created_at AS prescribed_at,
                 mr.patient_id,
+                mr.diagnosis,
                 CONCAT(pt.first_name, ' ', pt.last_name) AS patient_name,
                 pt.allergies,
                 CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name,

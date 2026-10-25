@@ -9,6 +9,58 @@ DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment; //
 
 DROP TRIGGER IF EXISTS trg_notify_admission_inserted; //
 
+CREATE TRIGGER trg_prevent_duplicate_open_admission
+BEFORE INSERT ON Admissions
+FOR EACH ROW
+BEGIN
+    DECLARE v_locked_patient_id INT;
+    DECLARE v_open_admission_id INT DEFAULT NULL;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_open_admission_id = NULL;
+
+    SELECT patient_id
+    INTO v_locked_patient_id
+    FROM Patients
+    WHERE patient_id = NEW.patient_id
+    FOR UPDATE;
+
+    SELECT a.admission_id
+    INTO v_open_admission_id
+    FROM Admissions a
+    LEFT JOIN Discharges d ON d.admission_id = a.admission_id
+    WHERE a.patient_id = NEW.patient_id
+      AND (d.admission_id IS NULL OR d.status <> 'Discharged')
+    LIMIT 1;
+
+    IF v_open_admission_id IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Patient already has an open admission. Complete discharge before admitting again.';
+    END IF;
+END //
+
+CREATE TRIGGER trg_prevent_duplicate_admission_assignment
+BEFORE UPDATE ON Admissions
+FOR EACH ROW
+BEGIN
+    DECLARE v_open_admission_id INT DEFAULT NULL;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_open_admission_id = NULL;
+
+    IF NEW.status = 'Admitted' AND OLD.status <> 'Admitted' THEN
+        SELECT a.admission_id
+        INTO v_open_admission_id
+        FROM Admissions a
+        LEFT JOIN Discharges d ON d.admission_id = a.admission_id
+        WHERE a.patient_id = NEW.patient_id
+          AND a.admission_id <> NEW.admission_id
+          AND (d.admission_id IS NULL OR d.status <> 'Discharged')
+        LIMIT 1;
+
+        IF v_open_admission_id IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Patient already has an open admission. Complete discharge before admitting again.';
+        END IF;
+    END IF;
+END //
+
 CREATE TRIGGER trg_notify_admission_inserted
 AFTER INSERT ON Admissions
 FOR EACH ROW

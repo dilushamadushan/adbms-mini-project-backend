@@ -45,15 +45,26 @@ def get_patient_records(conn: MySQLConnection, search: Optional[str] = None) -> 
             for result in cursor.stored_results():
                 records.extend(result.fetchall())
         else:
-            cursor.execute("SELECT fn_recep_get_all_patients() AS patient_records")
-            row = cursor.fetchone()
-            patient_records = row["patient_records"]
-            records = (
-                json.loads(patient_records)
-                if isinstance(patient_records, (str, bytes, bytearray))
-                else patient_records
+            cursor.execute(
+                """
+                SELECT 
+                    p.patient_id,
+                    p.user_id,
+                    u.username,
+                    u.email,
+                    p.first_name,
+                    p.last_name,
+                    p.dob,
+                    p.blood_group,
+                    p.emergency_contact,
+                    p.allergies
+                FROM Patients p
+                JOIN Users u ON u.user_id = p.user_id
+                WHERE LOWER(u.role) = 'patient'
+                ORDER BY p.last_name ASC, p.first_name ASC
+                """
             )
-            records.sort(key=lambda patient: (patient["last_name"], patient["first_name"]))
+            records = cursor.fetchall() or []
         return records
     finally:
         cursor.close()

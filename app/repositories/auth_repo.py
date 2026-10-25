@@ -60,10 +60,18 @@ def is_token_active_fn(conn: MySQLConnection, token_hash: str) -> bool:
 
 
 def get_active_session_count_fn(conn: MySQLConnection, user_id: int) -> int:
-  
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT fn_get_active_session_count(%s)", (user_id,))
+        cursor.execute(
+            """
+            SELECT COUNT(*) 
+            FROM Refresh_Tokens 
+            WHERE user_id = %s 
+              AND revoked = FALSE 
+              AND expires_at > NOW()
+            """,
+            (user_id,),
+        )
         row = cursor.fetchone()
         return int(row[0]) if row else 0
     finally:

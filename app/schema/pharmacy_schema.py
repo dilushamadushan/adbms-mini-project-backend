@@ -100,6 +100,8 @@ class DailyDispensingReportResponse(BaseModel):
     total_dispensations: int
     total_units: int
     total_revenue: Decimal
+    medicine_names: Optional[str] = None
+    medicines_detail: Optional[str] = None
 
 class PharmacyDashboardKpisResponse(BaseModel):
     total_medicines: int

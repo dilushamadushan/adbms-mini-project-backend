@@ -1,8 +1,15 @@
-USE hms;
+DROP FUNCTION IF EXISTS fn_is_token_active;
+DROP FUNCTION IF EXISTS fn_calculate_provider_avg_time; 
+DROP FUNCTION IF EXISTS fn_get_workload_level; 
+DROP FUNCTION IF EXISTS fn_get_audit_risk; 
+DROP FUNCTION IF EXISTS fn_bed_occupancy_pct; 
+DROP FUNCTION IF EXISTS fn_recep_get_all_patients;
+DROP FUNCTION IF EXISTS fn_calculate_medicine_status;
+DROP FUNCTION IF EXISTS fn_get_total_inventory_value;
 
 DELIMITER //
 
-DROP FUNCTION IF EXISTS fn_is_token_active; //
+-- TG/1407 --
 
 CREATE FUNCTION fn_is_token_active(p_token_hash VARCHAR(255))
 RETURNS BOOLEAN
@@ -17,76 +24,6 @@ BEGIN
       AND expires_at > NOW();
     RETURN (v_count > 0);
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_active_session_count; //
-
-CREATE FUNCTION fn_get_active_session_count(p_user_id INT)
-RETURNS INT
-DETERMINISTIC
-READS SQL DATA
-BEGIN
-    DECLARE v_active_count INT;
-    SELECT COUNT(*) INTO v_active_count
-    FROM Refresh_Tokens
-    WHERE user_id = p_user_id
-      AND revoked = FALSE
-      AND expires_at > NOW();
-    RETURN v_active_count;
-END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_department_depth; //
-
-CREATE FUNCTION fn_get_department_depth(p_dept_id INT)
-RETURNS INT
-DETERMINISTIC
-READS SQL DATA
-BEGIN
-    DECLARE v_depth INT DEFAULT 0;
-    DECLARE v_current_parent INT;
-
-    SELECT parent_dept_id INTO v_current_parent 
-    FROM Departments 
-    WHERE dept_id = p_dept_id;
-
-    WHILE v_current_parent IS NOT NULL AND v_depth < 20 DO
-        SET v_depth = v_depth + 1;
-        SELECT parent_dept_id INTO v_current_parent 
-        FROM Departments 
-        WHERE dept_id = v_current_parent;
-    END WHILE;
-
-    RETURN v_depth;
-END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_department_staff_count; //
-
-CREATE FUNCTION fn_get_department_staff_count(p_dept_id INT)
-RETURNS INT
-DETERMINISTIC
-READS SQL DATA
-BEGIN
-    DECLARE v_count INT DEFAULT 0;
-    SELECT COUNT(*) INTO v_count FROM Staff WHERE dept_id = p_dept_id;
-    RETURN v_count;
-END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_calculate_provider_avg_time; //
 
 CREATE FUNCTION fn_calculate_provider_avg_time(p_doctor_id INT)
 RETURNS INT
@@ -114,12 +51,6 @@ BEGIN
     END IF;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_workload_level; //
-
 CREATE FUNCTION fn_get_workload_level(p_count INT, p_pct DECIMAL(5,2))
 RETURNS VARCHAR(20)
 DETERMINISTIC
@@ -135,12 +66,6 @@ BEGIN
         RETURN 'Low';
     END IF;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_get_audit_risk; //
 
 CREATE FUNCTION fn_get_audit_risk(p_action VARCHAR(100), p_details JSON)
 RETURNS VARCHAR(10)
@@ -184,12 +109,6 @@ BEGIN
     END IF;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_bed_occupancy_pct; //
-
 CREATE FUNCTION fn_bed_occupancy_pct(p_ward_id INT)
 RETURNS DECIMAL(5,2)
 DETERMINISTIC
@@ -213,13 +132,7 @@ BEGIN
     RETURN ROUND((v_occupied * 100.0) / v_total, 2);
 END //
 
-DELIMITER ;
-
-USE hms;
-
-DELIMITER //
-
-DROP FUNCTION IF EXISTS fn_recep_get_all_patients //
+-- Chavi --
 CREATE FUNCTION fn_recep_get_all_patients()
 RETURNS JSON
 READS SQL DATA
@@ -250,6 +163,45 @@ BEGIN
 
     RETURN v_patients;
 END //
+
+-- thimira --
+CREATE FUNCTION fn_calculate_medicine_status(
+    p_stock INT,
+    p_reorder INT,
+    p_expiry DATE
+)
+RETURNS VARCHAR(30)
+DETERMINISTIC
+NO SQL
+BEGIN
+    IF p_stock <= 0 THEN
+        RETURN 'OUT_OF_STOCK';
+    ELSEIF p_expiry <= CURDATE() THEN
+        RETURN 'EXPIRED';
+    ELSEIF p_expiry <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN
+        RETURN 'EXPIRING_SOON';
+    ELSEIF p_stock <= p_reorder THEN
+        RETURN 'LOW_STOCK';
+    ELSE
+        RETURN 'IN_STOCK';
+    END IF;
+END //
+
+CREATE FUNCTION fn_get_total_inventory_value()
+RETURNS DECIMAL(12,2)
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE total_val DECIMAL(12,2) DEFAULT 0.00;
+
+    SELECT COALESCE(SUM(unit_price * stock_qty), 0.00)
+    INTO total_val
+    FROM Medicines
+    WHERE is_active = TRUE;
+
+    RETURN total_val;
+END //
+
 
 DELIMITER ;
 

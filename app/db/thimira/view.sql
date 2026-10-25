@@ -60,7 +60,10 @@ SELECT
     COUNT(d.dispense_id) AS total_transactions,
     SUM(d.quantity) AS total_units_dispensed,
     SUM(d.quantity * d.unit_price_at_sale) AS total_revenue,
-    COUNT(DISTINCT d.pharmacist_id) AS pharmacists_on_duty
+    COUNT(DISTINCT d.pharmacist_id) AS pharmacists_on_duty,
+    GROUP_CONCAT(DISTINCT m.med_name ORDER BY m.med_name SEPARATOR ', ') AS medicine_names,
+    GROUP_CONCAT(DISTINCT CONCAT(m.med_name, ' (', d.quantity, ' units)') ORDER BY m.med_name SEPARATOR ', ') AS medicines_detail
 FROM Dispensations d
+LEFT JOIN Medicines m ON d.medicine_id = m.medicine_id
 GROUP BY DATE(d.dispensed_at)
 ORDER BY dispense_date DESC;
