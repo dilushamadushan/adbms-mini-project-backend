@@ -26,6 +26,28 @@ FROM medicines
 ORDER BY med_name;
 
 
+-- Gets patient and appointment details for the doctor's lab-order page.
+
+DROP VIEW IF EXISTS vw_lab_order_patient_details;
+
+CREATE VIEW vw_lab_order_patient_details AS
+SELECT
+    p.patient_id,
+    CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+    TIMESTAMPDIFF(YEAR, p.dob, CURDATE()) AS age,
+    p.blood_group,
+    COALESCE(NULLIF(TRIM(p.allergies), ''), 'None') AS allergies,
+    a.apt_id AS appointment_id,
+    a.apt_date AS appointment_date,
+    a.status AS appointment_status
+FROM Patients AS p
+INNER JOIN Appointments AS a
+    ON a.patient_id = p.patient_id;
+
+SELECT *
+FROM vw_lab_order_patient_details;
+
+
 
 
 

@@ -20,3 +20,35 @@ ON medication_administration_records (rx_id, administered_at);
 -- Checks "was a reminder already sent?" quickly
 CREATE INDEX idx_notifications_type
 ON notifications (type);
+
+
+
+
+
+
+
+-- Speeds up loading lab results for one patient.
+CREATE INDEX idx_lab_orders_patient_date
+ON Lab_Orders (patient_id, ordered_at);
+
+-- Speeds up finding pending lab orders.
+CREATE INDEX idx_lab_orders_status
+ON Lab_Orders (status);
+
+
+
+-- Speeds up finding a patient's appointments by date.
+CREATE INDEX idx_appointments_patient_date
+ON Appointments (patient_id, apt_date);
+
+-- Speeds up filtering appointments by patient and status.
+CREATE INDEX idx_appointments_patient_status
+ON Appointments (patient_id, status);
+
+-- Speeds up searching audit logs by action and latest time.
+CREATE INDEX idx_audit_logs_action_time
+ON Audit_Logs (action_type, timestamp);
+
+-- Speeds up searching audit logs for a specific table.
+CREATE INDEX idx_audit_logs_resource_time
+ON Audit_Logs (resource_table, timestamp);

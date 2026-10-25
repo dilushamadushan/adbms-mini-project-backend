@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Optional, Union
 from pydantic import BaseModel, field_validator
 
@@ -110,6 +110,49 @@ class PatientAppointmentDetailsResponse(BaseModel):
     apt_date: str
     apt_time: str
     reason: str
+
+
+class LabOrderPatientDetailsResponse(BaseModel):
+    patient_id: int
+    patient_name: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    appointment_id: int
+    appointment_date: date
+    appointment_status: str
+
+
+class CreateLabOrderRequest(BaseModel):
+    patient_id: int
+    doctor_user_id: int
+    test_type: str
+
+
+class CreateLabOrderResponse(BaseModel):
+    lab_id: int
+    patient_id: int
+    doctor_id: int
+    test_type: str
+    status: str
+    results_text: str
+
+
+class PatientLabResultResponse(BaseModel):
+    lab_id: int
+    patient_id: int
+    patient_name: str
+    age: Optional[int] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    doctor_id: Optional[int] = None
+    doctor_name: Optional[str] = None
+    test_type: str
+    status: str
+    result: str
+    ordered_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 class AdmissionStatusResponse(BaseModel):
