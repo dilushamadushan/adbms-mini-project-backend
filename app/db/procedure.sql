@@ -1,58 +1,21 @@
-USE hms;
+DROP PROCEDURE IF EXISTS sp_rotate_refresh_token;
+DROP PROCEDURE IF EXISTS sp_revoke_all_user_sessions;
+DROP PROCEDURE IF EXISTS sp_cleanup_expired_tokens;
+DROP PROCEDURE IF EXISTS sp_get_department_hierarchy;
+DROP PROCEDURE IF EXISTS sp_generate_workload_report;
+DROP PROCEDURE IF EXISTS sp_get_hospital_kpi_overview;
+DROP PROCEDURE IF EXISTS sp_recep_get_appointments;
+DROP PROCEDURE IF EXISTS sp_recep_search_patients_by_name;
+
+DROP PROCEDURE IF EXISTS sp_add_or_update_medicine;
+DROP PROCEDURE IF EXISTS sp_receive_stock;
+DROP PROCEDURE IF EXISTS sp_update_purchase_order_status;
+DROP PROCEDURE IF EXISTS sp_receive_and_restock_purchase_order;
+DROP PROCEDURE IF EXISTS sp_get_stock_receipts_history;
 
 DELIMITER //
 
-DROP PROCEDURE IF EXISTS GetAllPatients; //
-
-CREATE PROCEDURE GetAllPatients()
-BEGIN
-    SELECT 
-        p.patient_id,
-        p.first_name,
-        p.last_name,
-        p.dob,
-        p.blood_group,
-        p.emergency_contact,
-        p.allergies,
-        u.user_id,
-        u.username,
-        u.email,
-        u.role,
-        u.is_active,
-        p.created_at,
-        p.updated_at
-    FROM Patients p
-    INNER JOIN Users u ON p.user_id = u.user_id;
-END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS GetAllStaff; //
-
-CREATE PROCEDURE GetAllStaff()
-BEGIN
-    SELECT 
-        s.staff_id,
-        s.first_name,
-        s.last_name,
-        s.dept_id,
-        s.specialty,
-        u.user_id,
-        u.username,
-        u.email,
-        u.role,
-        u.is_active
-    FROM Staff s
-    INNER JOIN Users u ON s.user_id = u.user_id;
-END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_rotate_refresh_token; //
+-- TG/1407 --
 
 CREATE PROCEDURE sp_rotate_refresh_token(
     IN p_old_token_hash VARCHAR(255),
@@ -96,12 +59,6 @@ BEGIN
     COMMIT;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_revoke_all_user_sessions; //
-
 CREATE PROCEDURE sp_revoke_all_user_sessions(
     IN p_user_id INT,
     OUT p_revoked_count INT
@@ -112,12 +69,6 @@ BEGIN
 
     SET p_revoked_count = ROW_COUNT();
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_cleanup_expired_tokens; //
 
 CREATE PROCEDURE sp_cleanup_expired_tokens(
     IN p_older_than_days INT,
@@ -130,12 +81,6 @@ BEGIN
 
     SET p_deleted_count = ROW_COUNT();
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_get_department_hierarchy; //
 
 CREATE PROCEDURE sp_get_department_hierarchy()
 BEGIN
@@ -172,51 +117,6 @@ BEGIN
     GROUP BY dh.dept_id, dh.dept_name, dh.parent_dept_id, dh.hierarchy_path, dh.depth_level
     ORDER BY dh.hierarchy_path ASC;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_delete_department; //
-
-CREATE PROCEDURE sp_delete_department(
-    IN p_dept_id INT
-)
-BEGIN
-    DECLARE v_sub_count INT DEFAULT 0;
-    DECLARE v_staff_count INT DEFAULT 0;
-    DECLARE v_exists INT DEFAULT 0;
-
-    START TRANSACTION;
-
-    SELECT COUNT(*) INTO v_exists FROM Departments WHERE dept_id = p_dept_id;
-    IF v_exists = 0 THEN
-        ROLLBACK;
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Department does not exist';
-    END IF;
-
-    SELECT COUNT(*) INTO v_sub_count FROM Departments WHERE parent_dept_id = p_dept_id;
-    IF v_sub_count > 0 THEN
-        ROLLBACK;
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot delete: Sub-departments depend on this department';
-    END IF;
-
-    SELECT COUNT(*) INTO v_staff_count FROM Staff WHERE dept_id = p_dept_id;
-    IF v_staff_count > 0 THEN
-        ROLLBACK;
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot delete: Staff members are assigned to this department';
-    END IF;
-
-    DELETE FROM Departments WHERE dept_id = p_dept_id;
-
-    COMMIT;
-END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_generate_workload_report; //
 
 CREATE PROCEDURE sp_generate_workload_report(
     IN p_start_date DATE,
@@ -319,12 +219,6 @@ BEGIN
 
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_get_hospital_kpi_overview; //
-
 CREATE PROCEDURE sp_get_hospital_kpi_overview(
     IN p_target_date DATE
 )
@@ -370,62 +264,230 @@ BEGIN
 
 END //
 
-DELIMITER ;
+-- Chavi --
 
-DELIMITER //
-
-DROP PROCEDURE IF EXISTS sp_get_audit_logs; //
-
-CREATE PROCEDURE sp_get_audit_logs(
-    IN p_page   INT,
-    IN p_limit  INT,
-    IN p_actor  VARCHAR(100),
-    IN p_action VARCHAR(100),
-    IN p_risk   VARCHAR(20),
-    IN p_date   VARCHAR(20)
+CREATE PROCEDURE sp_recep_get_appointments(
+    IN p_appointment_id INT,
+    IN p_patient_id INT,
+    IN p_appointment_date DATE,
+    IN p_patient_name VARCHAR(201)
 )
 BEGIN
-    DECLARE v_offset INT;
-    DECLARE v_page INT DEFAULT 1;
-    DECLARE v_limit INT DEFAULT 10;
+    SELECT apt_id, patient_id, patient_name, doctor_id, doctor_name,
+           dept_id, dept_name, apt_date, time_slot, status
+    FROM vw_recep_appointments
+    WHERE (p_appointment_id IS NULL OR apt_id = p_appointment_id)
+      AND (p_patient_id IS NULL OR patient_id = p_patient_id)
+      AND (p_appointment_date IS NULL OR apt_date = p_appointment_date)
+      AND (
+          p_patient_name IS NULL
+          OR TRIM(p_patient_name) = ''
+          OR patient_name LIKE CONCAT('%', TRIM(p_patient_name), '%')
+      )
+    ORDER BY apt_date, time_slot;
+END //
 
-    IF p_page IS NOT NULL AND p_page > 0 THEN
-        SET v_page = p_page;
-    END IF;
-    IF p_limit IS NOT NULL AND p_limit > 0 THEN
-        SET v_limit = p_limit;
-    END IF;
-    SET v_offset = (v_page - 1) * v_limit;
+CREATE PROCEDURE sp_recep_search_patients_by_name(IN p_name VARCHAR(201))
+BEGIN
+    DECLARE v_name VARCHAR(201);
+    DECLARE v_first_name VARCHAR(100);
+    DECLARE v_last_name VARCHAR(100);
 
-    WITH FilteredLogs AS (
-        SELECT 
-            v.log_id,
-            v.timestamp,
-            v.raw_timestamp,
-            v.actor,
-            v.action,
-            v.resource,
-            v.risk,
-            v.details,
-            COUNT(*) OVER() AS total_count
-        FROM vw_audit_logs_enriched v
-        WHERE (p_actor IS NULL OR TRIM(p_actor) = '' OR v.actor LIKE CONCAT('%', TRIM(p_actor), '%'))
-          AND (p_action IS NULL OR TRIM(p_action) = '' OR v.action LIKE CONCAT('%', TRIM(p_action), '%'))
-          AND (p_risk IS NULL OR TRIM(p_risk) = '' OR UPPER(v.risk) = UPPER(TRIM(p_risk)))
-          AND (p_date IS NULL OR TRIM(p_date) = '' OR DATE(v.raw_timestamp) = DATE(TRIM(p_date)))
-    )
+    SET v_name = TRIM(p_name);
+    SET v_first_name = SUBSTRING_INDEX(v_name, ' ', 1);
+    SET v_last_name = TRIM(SUBSTRING(v_name, CHAR_LENGTH(v_first_name) + 1));
+
+    SELECT p.patient_id, p.user_id, u.username, u.email,
+           p.first_name, p.last_name, p.dob, p.blood_group,
+           p.emergency_contact, p.allergies
+    FROM Patients p
+    JOIN Users u ON u.user_id = p.user_id
+    WHERE LOWER(u.role) = 'patient'
+      AND (
+          (
+              p.first_name LIKE CONCAT(v_first_name, '%')
+              AND (v_last_name = '' OR p.last_name LIKE CONCAT(v_last_name, '%'))
+          )
+          OR (
+              v_last_name = ''
+              AND p.last_name LIKE CONCAT(v_first_name, '%')
+          )
+      )
+    ORDER BY p.last_name, p.first_name;
+END //
+
+-- thimira --
+
+CREATE PROCEDURE sp_add_or_update_medicine(
+    IN p_medicine_id INT,
+    IN p_med_name VARCHAR(100),
+    IN p_generic_name VARCHAR(100),
+    IN p_unit_price DECIMAL(10,2),
+    IN p_stock_qty INT,
+    IN p_reorder_level INT,
+    IN p_expiry_date DATE,
+    IN p_is_active BOOLEAN,
+    OUT p_out_id INT
+)
+BEGIN
+    IF p_medicine_id IS NULL OR p_medicine_id = 0 THEN
+        INSERT INTO Medicines (
+            med_name, generic_name, unit_price, stock_qty, 
+            reorder_level, expiry_date, is_active
+        ) VALUES (
+            p_med_name, p_generic_name, p_unit_price, COALESCE(p_stock_qty, 0),
+            COALESCE(p_reorder_level, 20), p_expiry_date, COALESCE(p_is_active, TRUE)
+        );
+        SET p_out_id = LAST_INSERT_ID();
+    ELSE
+        UPDATE Medicines
+        SET 
+            med_name = p_med_name,
+            generic_name = p_generic_name,
+            unit_price = p_unit_price,
+            stock_qty = COALESCE(p_stock_qty, stock_qty),
+            reorder_level = COALESCE(p_reorder_level, reorder_level),
+            expiry_date = COALESCE(p_expiry_date, expiry_date),
+            is_active = COALESCE(p_is_active, is_active)
+        WHERE medicine_id = p_medicine_id;
+        SET p_out_id = p_medicine_id;
+    END IF;
+END //
+
+CREATE PROCEDURE sp_receive_stock(
+    IN p_medicine_id INT,
+    IN p_quantity INT,
+    IN p_expiry_date DATE,
+    IN p_received_by INT,
+    OUT p_receipt_id INT
+)
+BEGIN
+    IF p_quantity <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Quantity received must be greater than zero.';
+    END IF;
+
+    INSERT INTO Stock_Receipts (
+        medicine_id, quantity, expiry_date, received_by, received_at
+    ) VALUES (
+        p_medicine_id, p_quantity, p_expiry_date, p_received_by, NOW()
+    );
+
+    SET p_receipt_id = LAST_INSERT_ID();
+END //
+
+CREATE PROCEDURE sp_update_purchase_order_status(
+    IN p_order_id INT,
+    IN p_status VARCHAR(30)
+)
+BEGIN
+    DECLARE v_order_date DATETIME;
+    DECLARE v_expected_date DATE;
+
+    IF p_status = 'RECEIVED' THEN
+        SELECT order_date, expected_delivery_date 
+        INTO v_order_date, v_expected_date
+        FROM Purchase_Orders
+        WHERE order_id = p_order_id;
+
+        IF DATEDIFF(CURDATE(), DATE(v_order_date)) < 1 AND CURDATE() < v_expected_date THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot confirm stock receipt before 1 day from the order date. The order is still in transit from the supplier.';
+        END IF;
+    END IF;
+
+    UPDATE Purchase_Orders
+    SET status = p_status
+    WHERE order_id = p_order_id;
+END //
+
+CREATE PROCEDURE sp_receive_and_restock_purchase_order(
+    IN p_order_id INT,
+    IN p_staff_id INT,
+    IN p_batch_expiry_date DATE
+)
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE v_med_id INT;
+    DECLARE v_qty INT;
+    DECLARE v_order_num VARCHAR(50);
+    DECLARE v_cur_status VARCHAR(30);
+    DECLARE v_order_date DATETIME;
+    DECLARE v_expected_date DATE;
+
+    DECLARE cur_items CURSOR FOR 
+        SELECT medicine_id, requested_quantity 
+        FROM Purchase_Order_Items 
+        WHERE order_id = p_order_id;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+    SELECT order_number, status, order_date, expected_delivery_date 
+    INTO v_order_num, v_cur_status, v_order_date, v_expected_date
+    FROM Purchase_Orders
+    WHERE order_id = p_order_id;
+
+    IF v_cur_status = 'RECEIVED' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'This purchase order has already been received and restocked.';
+    END IF;
+
+    IF DATEDIFF(CURDATE(), DATE(v_order_date)) < 1 AND CURDATE() < v_expected_date THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot confirm stock receipt before 1 day from the order date. The order is still in transit from the supplier.';
+    END IF;
+
+    SET p_batch_expiry_date = COALESCE(p_batch_expiry_date, DATE_ADD(CURDATE(), INTERVAL 1 YEAR));
+
+    OPEN cur_items;
+
+    read_loop: LOOP
+        FETCH cur_items INTO v_med_id, v_qty;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+
+        INSERT INTO Stock_Receipts (medicine_id, quantity, expiry_date, received_by, received_at)
+        VALUES (v_med_id, v_qty, p_batch_expiry_date, p_staff_id, NOW());
+    END LOOP;
+
+    CLOSE cur_items;
+
+    UPDATE Purchase_Orders
+    SET status = 'RECEIVED'
+    WHERE order_id = p_order_id;
+
+    INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+    VALUES (
+        'Order Restocked',
+        CONCAT('Restock order "', v_order_num, '" has been verified and items added to active inventory.'),
+        'STOCK_RESTOCKED',
+        'pharmacist',
+        JSON_OBJECT('order_id', p_order_id, 'order_number', v_order_num),
+        NOW()
+    );
+END //
+
+CREATE PROCEDURE sp_get_stock_receipts_history(
+    IN p_limit INT
+)
+BEGIN
+    SET p_limit = COALESCE(p_limit, 50);
+
     SELECT 
-        log_id,
-        timestamp,
-        actor,
-        action,
-        resource,
-        risk,
-        details,
-        total_count
-    FROM FilteredLogs
-    ORDER BY raw_timestamp DESC, log_id DESC
-    LIMIT v_limit OFFSET v_offset;
+        sr.receipt_id,
+        sr.medicine_id,
+        m.med_name,
+        m.generic_name,
+        sr.quantity,
+        sr.expiry_date,
+        sr.received_by,
+        CONCAT(s.first_name, ' ', s.last_name) AS received_by_name,
+        sr.received_at
+    FROM Stock_Receipts sr
+    JOIN Medicines m ON sr.medicine_id = m.medicine_id
+    LEFT JOIN Staff s ON sr.received_by = s.staff_id
+    ORDER BY sr.received_at DESC
+    LIMIT p_limit;
 END //
 
 DELIMITER ;

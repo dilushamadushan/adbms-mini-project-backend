@@ -1,8 +1,29 @@
-USE hms;
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_issued;
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_revoked;
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_deleted;
+
+DROP TRIGGER IF EXISTS trg_prevent_department_self_parent;
+DROP TRIGGER IF EXISTS trg_audit_department_created;
+DROP TRIGGER IF EXISTS trg_audit_department_deleted;
+
+DROP TRIGGER IF EXISTS trg_notify_staff_created;
+DROP TRIGGER IF EXISTS trg_notify_department_created;
+DROP TRIGGER IF EXISTS trg_notify_department_deleted;
+
+DROP TRIGGER IF EXISTS trg_prevent_duplicate_open_admission;
+DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment;
+DROP TRIGGER IF EXISTS trg_notify_admission_inserted;
+
+DROP TRIGGER IF EXISTS trg_after_stock_receipt_insert;
+DROP TRIGGER IF EXISTS trg_before_dispensation_insert;
+DROP TRIGGER IF EXISTS trg_after_dispensation_insert;
+
+DROP TRIGGER IF EXISTS trg_check_po_delivery_lead_time;
+DROP TRIGGER IF EXISTS trg_check_po_receive_lead_time;
 
 DELIMITER //
 
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_issued; //
+-- TG/1407 --
 
 CREATE TRIGGER trg_audit_refresh_token_issued
 AFTER INSERT ON Refresh_Tokens
@@ -21,12 +42,6 @@ BEGIN
         )
     );
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_revoked; //
 
 CREATE TRIGGER trg_audit_refresh_token_revoked
 AFTER UPDATE ON Refresh_Tokens
@@ -48,12 +63,6 @@ BEGIN
     END IF;
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_deleted; //
-
 CREATE TRIGGER trg_audit_refresh_token_deleted
 AFTER DELETE ON Refresh_Tokens
 FOR EACH ROW
@@ -72,12 +81,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_prevent_department_self_parent; //
-
 CREATE TRIGGER trg_prevent_department_self_parent
 BEFORE UPDATE ON Departments
 FOR EACH ROW
@@ -87,12 +90,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Integrity violation: A department cannot be set as its own parent';
     END IF;
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_department_created; //
 
 CREATE TRIGGER trg_audit_department_created
 AFTER INSERT ON Departments
@@ -112,12 +109,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_audit_department_deleted; //
-
 CREATE TRIGGER trg_audit_department_deleted
 AFTER DELETE ON Departments
 FOR EACH ROW
@@ -135,12 +126,6 @@ BEGIN
         NOW()
     );
 END //
-
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_staff_created; //
 
 CREATE TRIGGER trg_notify_staff_created
 AFTER INSERT ON Staff
@@ -171,12 +156,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_department_created; //
-
 CREATE TRIGGER trg_notify_department_created
 AFTER INSERT ON Departments
 FOR EACH ROW
@@ -196,12 +175,6 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_department_deleted; //
-
 CREATE TRIGGER trg_notify_department_deleted
 AFTER DELETE ON Departments
 FOR EACH ROW
@@ -220,18 +193,7 @@ BEGIN
     );
 END //
 
-DELIMITER ;
-
-
-#--------------------------------------
-
-USE hms;
-
-DELIMITER //
-
-DROP TRIGGER IF EXISTS trg_notify_admission_created; //
-DROP TRIGGER IF EXISTS trg_prevent_duplicate_open_admission; //
-DROP TRIGGER IF EXISTS trg_notify_admission_confirmed; //
+-- Chavi --
 
 CREATE TRIGGER trg_prevent_duplicate_open_admission
 BEFORE INSERT ON Admissions
@@ -261,8 +223,6 @@ BEGIN
     END IF;
 END //
 
-DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment; //
-
 CREATE TRIGGER trg_prevent_duplicate_admission_assignment
 BEFORE UPDATE ON Admissions
 FOR EACH ROW
@@ -286,8 +246,6 @@ BEGIN
         END IF;
     END IF;
 END //
-
-DROP TRIGGER IF EXISTS trg_notify_admission_inserted; //
 
 CREATE TRIGGER trg_notify_admission_inserted
 AFTER INSERT ON Admissions
@@ -330,6 +288,105 @@ BEGIN
         ),
         NOW()
     );
+END //
+
+-- thimira --
+
+CREATE TRIGGER trg_after_stock_receipt_insert
+AFTER INSERT ON Stock_Receipts
+FOR EACH ROW
+BEGIN
+    UPDATE Medicines
+    SET 
+        stock_qty = stock_qty + NEW.quantity,
+        expiry_date = COALESCE(NEW.expiry_date, expiry_date),
+        is_active = TRUE
+    WHERE medicine_id = NEW.medicine_id;
+
+    INSERT INTO Audit_Logs (actor_id, action_type, resource_table, details, timestamp)
+    VALUES (
+        NEW.received_by,
+        'STOCK_RECEIVED',
+        'Medicines',
+        JSON_OBJECT(
+            'medicine_id', NEW.medicine_id,
+            'received_qty', NEW.quantity,
+            'receipt_id', NEW.receipt_id
+        ),
+        NOW()
+    );
+END //
+
+CREATE TRIGGER trg_before_dispensation_insert
+BEFORE INSERT ON Dispensations
+FOR EACH ROW
+BEGIN
+    DECLARE current_stock INT DEFAULT 0;
+
+    SELECT stock_qty INTO current_stock
+    FROM Medicines
+    WHERE medicine_id = NEW.medicine_id;
+
+    IF current_stock < NEW.quantity THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Insufficient stock available for this medication';
+    END IF;
+END //
+
+CREATE TRIGGER trg_after_dispensation_insert
+AFTER INSERT ON Dispensations
+FOR EACH ROW
+BEGIN
+    DECLARE remaining_stock INT;
+    DECLARE reorder_lvl INT;
+    DECLARE med_title VARCHAR(100);
+
+    UPDATE Medicines
+    SET stock_qty = stock_qty - NEW.quantity
+    WHERE medicine_id = NEW.medicine_id;
+
+    SELECT stock_qty, reorder_level, med_name 
+    INTO remaining_stock, reorder_lvl, med_title
+    FROM Medicines
+    WHERE medicine_id = NEW.medicine_id;
+
+    IF remaining_stock <= reorder_lvl THEN
+        INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+        VALUES (
+            'Low Stock Alert',
+            CONCAT('Warning: Medicine "', med_title, '" stock is low (Remaining: ', remaining_stock, ', Threshold: ', reorder_lvl, ').'),
+            'LOW_STOCK',
+            'pharmacist',
+            JSON_OBJECT(
+                'medicine_id', NEW.medicine_id,
+                'remaining_stock', remaining_stock,
+                'reorder_level', reorder_lvl
+            ),
+            NOW()
+        );
+    END IF;
+END //
+
+CREATE TRIGGER trg_check_po_delivery_lead_time
+BEFORE INSERT ON Purchase_Orders
+FOR EACH ROW
+BEGIN
+    IF NEW.expected_delivery_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Restock lead time must be at least 1 day. Expected delivery date must be at least 1 day in advance.';
+    END IF;
+END //
+
+CREATE TRIGGER trg_check_po_receive_lead_time
+BEFORE UPDATE ON Purchase_Orders
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'RECEIVED' AND OLD.status != 'RECEIVED' THEN
+        IF DATEDIFF(CURDATE(), DATE(OLD.order_date)) < 1 AND CURDATE() < OLD.expected_delivery_date THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot confirm stock receipt before 1 day from the order date. The order is still in transit from the supplier.';
+        END IF;
+    END IF;
 END //
 
 DELIMITER ;

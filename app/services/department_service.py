@@ -80,23 +80,19 @@ def update_department(dept_id: int, payload: DepartmentUpdate) -> Dict[str, Any]
 
 
 def delete_department(dept_id: int) -> bool:
-    import mysql.connector
     with get_db() as conn:
-        try:
-            department_repo.delete_department_sp(conn, dept_id)
-            return True
-        except mysql.connector.Error as err:
-            raise ValueError(err.msg)
-        except Exception:
-            existing = department_repo.get_department_by_id(conn, dept_id)
-            if not existing:
-                raise ValueError(f"Department with ID {dept_id} not found")
-            sub_count = department_repo.count_sub_departments(conn, dept_id)
-            if sub_count > 0:
-                raise ValueError(f"Cannot delete department: {sub_count} sub-department(s) depend on it")
-            staff_count = department_repo.count_staff_in_department(conn, dept_id)
-            if staff_count > 0:
-                raise ValueError(f"Cannot delete department: {staff_count} staff member(s) are assigned to it")
-            department_repo.delete_department(conn, dept_id)
-            return True
+        existing = department_repo.get_department_by_id(conn, dept_id)
+        if not existing:
+            raise ValueError(f"Department with ID {dept_id} not found")
+
+        sub_count = department_repo.count_sub_departments(conn, dept_id)
+        if sub_count > 0:
+            raise ValueError("Cannot delete: Sub-departments depend on this department")
+
+        staff_count = department_repo.count_staff_in_department(conn, dept_id)
+        if staff_count > 0:
+            raise ValueError("Cannot delete: Staff members are assigned to this department")
+
+        department_repo.delete_department(conn, dept_id)
+        return True
 
