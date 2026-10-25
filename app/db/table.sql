@@ -284,3 +284,101 @@ CREATE TABLE IF NOT EXISTS Dispensations (
     INDEX idx_disp_medicine   (medicine_id, dispensed_at)
 );
 
+CREATE TABLE IF NOT EXISTS Purchase_Orders (
+    order_id               INT AUTO_INCREMENT PRIMARY KEY,
+    order_number           VARCHAR(50) NOT NULL UNIQUE,
+    pharmacist_id          INT NOT NULL,
+    supplier_name          VARCHAR(150) NOT NULL DEFAULT 'State Pharmaceuticals Corporation',
+    order_date             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expected_delivery_date DATE NOT NULL,
+    total_cost             DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    status                 ENUM('PENDING_APPROVAL', 'APPROVED', 'ORDERED', 'RECEIVED', 'CANCELLED') NOT NULL DEFAULT 'PENDING_APPROVAL',
+    notes                  TEXT NULL,
+    created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (pharmacist_id) REFERENCES Staff(staff_id),
+    INDEX idx_order_date (order_date),
+    INDEX idx_order_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS Purchase_Order_Items (
+    item_id            INT AUTO_INCREMENT PRIMARY KEY,
+    order_id           INT NOT NULL,
+    medicine_id        INT NOT NULL,
+    requested_quantity INT NOT NULL,
+    unit_price         DECIMAL(10,2) NOT NULL,
+    subtotal           DECIMAL(10,2) NOT NULL,
+    CONSTRAINT chk_po_qty_positive CHECK (requested_quantity > 0),
+    FOREIGN KEY (order_id) REFERENCES Purchase_Orders(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (medicine_id) REFERENCES Medicines(medicine_id)
+);
+
+CREATE TABLE IF NOT EXISTS Medication_Administration_Records (
+    mar_id INT AUTO_INCREMENT PRIMARY KEY,
+    rx_id INT NOT NULL,
+    patient_id INT NOT NULL,
+    administered_by INT NOT NULL,
+    scheduled_time VARCHAR(20) DEFAULT '08:00',
+    status ENUM('Given', 'Not Given', 'Refused', 'Held') NOT NULL DEFAULT 'Given',
+    reason TEXT NULL,
+    notes TEXT NULL,
+    administered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (rx_id) REFERENCES Prescriptions(rx_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id),
+    FOREIGN KEY (administered_by) REFERENCES Staff(staff_id)
+);
+
+
+CREATE TABLE IF NOT EXISTS Doctor_Orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    doctor_id INT NOT NULL,
+    order_type ENUM('Medication', 'Lab', 'Diet', 'IV_Fluids', 'Nursing_Care', 'Special') NOT NULL,
+    instruction TEXT NOT NULL,
+    status ENUM('Pending', 'Acknowledged', 'In_Progress', 'Done') NOT NULL DEFAULT 'Pending',
+    acknowledged_by INT NULL,
+    acknowledged_at DATETIME NULL,
+    completed_by INT NULL,
+    completed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id),
+    FOREIGN KEY (doctor_id) REFERENCES Staff(staff_id),
+    FOREIGN KEY (acknowledged_by) REFERENCES Staff(staff_id),
+    FOREIGN KEY (completed_by) REFERENCES Staff(staff_id)
+);
+
+
+CREATE TABLE IF NOT EXISTS Nursing_Notes (
+    note_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    nurse_id INT NOT NULL,
+    note_type ENUM('SOAP', 'General', 'CarePlan', 'WoundCare', 'Diet') NOT NULL DEFAULT 'SOAP',
+    subjective TEXT NULL,
+    objective TEXT NULL,
+    assessment TEXT NULL,
+    plan TEXT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id),
+    FOREIGN KEY (nurse_id) REFERENCES Staff(staff_id)
+);
+
+
+CREATE TABLE IF NOT EXISTS Intake_Output_Logs (
+    io_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    recorded_by INT NOT NULL,
+    io_type ENUM('Intake', 'Output') NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    volume_ml INT NOT NULL,
+    notes VARCHAR(255) NULL,
+    recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id),
+    FOREIGN KEY (recorded_by) REFERENCES Staff(staff_id)
+);
+
+ALTER TABLE `admissions`
+  MODIFY COLUMN `status` ENUM('Admitted', 'Pending', 'Discharged') NOT NULL DEFAULT 'Pending';
+
+ALTER TABLE `discharges` ADD UNIQUE KEY `uq_discharge_admission` (`admission_id`);
+

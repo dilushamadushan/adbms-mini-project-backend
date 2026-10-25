@@ -1,55 +1,13 @@
 -- TG/1407 --
 
-DROP PROCEDURE IF EXISTS GetAllPatients;
-DROP PROCEDURE IF EXISTS GetAllStaff;
 DROP PROCEDURE IF EXISTS sp_rotate_refresh_token;
 DROP PROCEDURE IF EXISTS sp_revoke_all_user_sessions;
 DROP PROCEDURE IF EXISTS sp_cleanup_expired_tokens;
 DROP PROCEDURE IF EXISTS sp_get_department_hierarchy;
-DROP PROCEDURE IF EXISTS sp_delete_department;
 DROP PROCEDURE IF EXISTS sp_generate_workload_report;
 DROP PROCEDURE IF EXISTS sp_get_hospital_kpi_overview;
-DROP PROCEDURE IF EXISTS sp_get_audit_logs;
 
 DELIMITER //
-
-CREATE PROCEDURE GetAllPatients()
-BEGIN
-    SELECT 
-        p.patient_id,
-        p.first_name,
-        p.last_name,
-        p.dob,
-        p.blood_group,
-        p.emergency_contact,
-        p.allergies,
-        u.user_id,
-        u.username,
-        u.email,
-        u.role,
-        u.is_active,
-        p.created_at,
-        p.updated_at
-    FROM Patients p
-    INNER JOIN Users u ON p.user_id = u.user_id;
-END //
-
-CREATE PROCEDURE GetAllStaff()
-BEGIN
-    SELECT 
-        s.staff_id,
-        s.first_name,
-        s.last_name,
-        s.dept_id,
-        s.specialty,
-        u.user_id,
-        u.username,
-        u.email,
-        u.role,
-        u.is_active
-    FROM Staff s
-    INNER JOIN Users u ON s.user_id = u.user_id;
-END //
 
 CREATE PROCEDURE sp_rotate_refresh_token(
     IN p_old_token_hash VARCHAR(255),
@@ -150,39 +108,6 @@ BEGIN
     LEFT JOIN Staff s ON dh.dept_id = s.dept_id
     GROUP BY dh.dept_id, dh.dept_name, dh.parent_dept_id, dh.hierarchy_path, dh.depth_level
     ORDER BY dh.hierarchy_path ASC;
-END //
-
-CREATE PROCEDURE sp_delete_department(
-    IN p_dept_id INT
-)
-BEGIN
-    DECLARE v_sub_count INT DEFAULT 0;
-    DECLARE v_staff_count INT DEFAULT 0;
-    DECLARE v_exists INT DEFAULT 0;
-
-    START TRANSACTION;
-
-    SELECT COUNT(*) INTO v_exists FROM Departments WHERE dept_id = p_dept_id;
-    IF v_exists = 0 THEN
-        ROLLBACK;
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Department does not exist';
-    END IF;
-
-    SELECT COUNT(*) INTO v_sub_count FROM Departments WHERE parent_dept_id = p_dept_id;
-    IF v_sub_count > 0 THEN
-        ROLLBACK;
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot delete: Sub-departments depend on this department';
-    END IF;
-
-    SELECT COUNT(*) INTO v_staff_count FROM Staff WHERE dept_id = p_dept_id;
-    IF v_staff_count > 0 THEN
-        ROLLBACK;
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot delete: Staff members are assigned to this department';
-    END IF;
-
-    DELETE FROM Departments WHERE dept_id = p_dept_id;
-
-    COMMIT;
 END //
 
 CREATE PROCEDURE sp_generate_workload_report(
@@ -329,58 +254,6 @@ BEGIN
         p_target_date                                               AS target_date
     FROM ApptStats a;
 
-END //
-
-CREATE PROCEDURE sp_get_audit_logs(
-    IN p_page   INT,
-    IN p_limit  INT,
-    IN p_actor  VARCHAR(100),
-    IN p_action VARCHAR(100),
-    IN p_risk   VARCHAR(20),
-    IN p_date   VARCHAR(20)
-)
-BEGIN
-    DECLARE v_offset INT;
-    DECLARE v_page INT DEFAULT 1;
-    DECLARE v_limit INT DEFAULT 10;
-
-    IF p_page IS NOT NULL AND p_page > 0 THEN
-        SET v_page = p_page;
-    END IF;
-    IF p_limit IS NOT NULL AND p_limit > 0 THEN
-        SET v_limit = p_limit;
-    END IF;
-    SET v_offset = (v_page - 1) * v_limit;
-
-    WITH FilteredLogs AS (
-        SELECT 
-            v.log_id,
-            v.timestamp,
-            v.raw_timestamp,
-            v.actor,
-            v.action,
-            v.resource,
-            v.risk,
-            v.details,
-            COUNT(*) OVER() AS total_count
-        FROM vw_audit_logs_enriched v
-        WHERE (p_actor IS NULL OR TRIM(p_actor) = '' OR v.actor LIKE CONCAT('%', TRIM(p_actor), '%'))
-          AND (p_action IS NULL OR TRIM(p_action) = '' OR v.action LIKE CONCAT('%', TRIM(p_action), '%'))
-          AND (p_risk IS NULL OR TRIM(p_risk) = '' OR UPPER(v.risk) = UPPER(TRIM(p_risk)))
-          AND (p_date IS NULL OR TRIM(p_date) = '' OR DATE(v.raw_timestamp) = DATE(TRIM(p_date)))
-    )
-    SELECT 
-        log_id,
-        timestamp,
-        actor,
-        action,
-        resource,
-        risk,
-        details,
-        total_count
-    FROM FilteredLogs
-    ORDER BY raw_timestamp DESC, log_id DESC
-    LIMIT v_limit OFFSET v_offset;
 END //
 
 DELIMITER ;
