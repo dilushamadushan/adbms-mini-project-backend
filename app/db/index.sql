@@ -115,3 +115,14 @@ ON Audit_Logs (action_type, timestamp);
 -- Speeds up searching audit logs for a specific table.
 CREATE INDEX idx_audit_logs_resource_time 
 ON Audit_Logs (resource_table, timestamp);
+
+-- maleesha --
+
+CREATE INDEX `idx_mr_patient_created`
+ON `Medical_Records` (`patient_id`, `created_at` DESC);
+
+CREATE INDEX `idx_rx_record_status`
+ON `Prescriptions` (`record_id`, `status`);
+
+CREATE INDEX `idx_notif_patient_unread`
+ON `Notifications` (`target_role`, `target_user_id`, `is_read`, `created_at` DESC);

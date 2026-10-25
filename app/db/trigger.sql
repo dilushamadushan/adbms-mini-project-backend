@@ -21,8 +21,6 @@ DROP TRIGGER IF EXISTS trg_after_dispensation_insert;
 DROP TRIGGER IF EXISTS trg_check_po_delivery_lead_time;
 DROP TRIGGER IF EXISTS trg_check_po_receive_lead_time;
 
-
-
 DROP TRIGGER IF EXISTS trg_discharge_after_insert;
 DROP TRIGGER IF EXISTS trg_medical_record_after_insert;
 DROP TRIGGER IF EXISTS trg_audit_mar_administration;
@@ -31,6 +29,13 @@ DROP TRIGGER IF EXISTS trg_mar_after_update;
 DROP TRIGGER IF EXISTS trg_doctor_order_after_insert;
 DROP TRIGGER IF EXISTS trg_lab_order_after_insert;
 DROP TRIGGER IF EXISTS trg_lab_order_pending_to_completed;
+
+DROP TRIGGER IF EXISTS trg_notify_nurse_new_lab_order;
+DROP TRIGGER IF EXISTS trg_audit_bed_status_change;
+DROP TRIGGER IF EXISTS trg_audit_mar_administrations;
+DROP TRIGGER IF EXISTS trg_after_vitals_critical_alert;
+DROP TRIGGER IF EXISTS trg_patient_notify_on_medical_record;
+DROP TRIGGER IF EXISTS trg_patient_notify_on_prescription;
 
 DELIMITER //
 
@@ -619,6 +624,246 @@ BEGIN
                 'old_status', OLD.status,
                 'new_status', NEW.status,
                 'results_text', COALESCE(NEW.results_text, '')
+            ),
+            NOW()
+        );
+    END IF;
+END //
+
+-- nimhara --
+
+CREATE TRIGGER trg_after_vitals_critical_alert
+AFTER INSERT ON Vitals_Log
+FOR EACH ROW
+BEGIN
+    DECLARE v_systolic INT DEFAULT 120;
+    DECLARE v_is_critical BOOLEAN DEFAULT FALSE;
+    DECLARE v_patient_name VARCHAR(200);
+    DECLARE v_attending_doc_id INT;
+
+    IF NEW.bp IS NOT NULL AND INSTR(NEW.bp, '/') > 0 THEN
+        SET v_systolic = CAST(SUBSTRING_INDEX(NEW.bp, '/', 1) AS UNSIGNED);
+    END IF;
+
+    IF (NEW.spo2 IS NOT NULL AND NEW.spo2 < 92)
+       OR (v_systolic >= 160 OR v_systolic <= 85)
+       OR (NEW.pulse >= 120 OR NEW.pulse <= 45)
+       OR (NEW.temperature >= 102.0)
+       OR (NEW.resp_rate IS NOT NULL AND (NEW.resp_rate >= 28 OR NEW.resp_rate <= 8)) THEN
+        SET v_is_critical = TRUE;
+    END IF;
+
+    IF v_is_critical THEN
+        SELECT CONCAT(first_name, ' ', last_name) INTO v_patient_name
+        FROM Patients
+        WHERE patient_id = NEW.patient_id;
+
+        SELECT s.user_id INTO v_attending_doc_id
+        FROM Admissions adm
+        INNER JOIN Staff s ON adm.admitted_doctor_id = s.staff_id
+        WHERE adm.patient_id = NEW.patient_id AND adm.status = 'Admitted'
+        LIMIT 1;
+
+        INSERT INTO Notifications (title, message, type, target_role, target_user_id, is_read, details, created_at)
+        VALUES (
+            'CRITICAL PATIENT VITALS ALERT',
+            CONCAT('Patient ', COALESCE(v_patient_name, CONCAT('ID #', NEW.patient_id)), 
+                   ' recorded critical vitals: BP: ', COALESCE(NEW.bp, 'N/A'), 
+                   ', HR: ', COALESCE(NEW.pulse, 0), ' bpm', 
+                   ', SpO2: ', COALESCE(CONCAT(NEW.spo2, '%'), 'N/A'),
+                   ', Temp: ', COALESCE(NEW.temperature, 0.0), '°F.'),
+            'CRITICAL_VITALS',
+            'doctor',
+            v_attending_doc_id,
+            FALSE,
+            JSON_OBJECT(
+                'vital_id', NEW.vital_id,
+                'patient_id', NEW.patient_id,
+                'bp', NEW.bp,
+                'pulse', NEW.pulse,
+                'spo2', NEW.spo2,
+                'resp_rate', NEW.resp_rate,
+                'temperature', NEW.temperature,
+                'recorded_by', NEW.recorded_by
+            ),
+            NOW()
+        );
+    END IF;
+END //
+
+CREATE TRIGGER trg_audit_mar_administrations
+AFTER INSERT ON Medication_Administration_Records
+FOR EACH ROW
+BEGIN
+    INSERT INTO Audit_Logs (actor_id, action_type, resource_table, details, timestamp)
+    VALUES (
+        NEW.administered_by,
+        'MEDICATION_ADMINISTERED',
+        'Medication_Administration_Records',
+        JSON_OBJECT(
+            'mar_id', NEW.mar_id,
+            'rx_id', NEW.rx_id,
+            'patient_id', NEW.patient_id,
+            'status', NEW.status,
+            'reason', NEW.reason,
+            'administered_at', NEW.administered_at
+        ),
+        NOW()
+    );
+END //
+
+CREATE TRIGGER trg_audit_bed_status_change
+AFTER UPDATE ON Beds
+FOR EACH ROW
+BEGIN
+    IF OLD.status <> NEW.status OR (OLD.current_patient_id <=> NEW.current_patient_id) = 0 THEN
+        INSERT INTO Audit_Logs (actor_id, action_type, resource_table, details, timestamp)
+        VALUES (
+            NULL,
+            'BED_STATUS_CHANGED',
+            'Beds',
+            JSON_OBJECT(
+                'bed_id', NEW.bed_id,
+                'bed_number', NEW.bed_number,
+                'old_status', OLD.status,
+                'new_status', NEW.status,
+                'old_patient_id', OLD.current_patient_id,
+                'new_patient_id', NEW.current_patient_id
+            ),
+            NOW()
+        );
+    END IF;
+END //
+
+CREATE TRIGGER trg_notify_nurse_new_lab_order
+AFTER INSERT ON Lab_Orders
+FOR EACH ROW
+BEGIN
+    DECLARE v_patient_name VARCHAR(200);
+    DECLARE v_doc_name VARCHAR(200);
+
+    IF NEW.status = 'Pending' THEN
+        SELECT CONCAT(first_name, ' ', last_name) INTO v_patient_name
+        FROM Patients
+        WHERE patient_id = NEW.patient_id;
+
+        SELECT CONCAT(first_name, ' ', last_name) INTO v_doc_name
+        FROM Staff
+        WHERE staff_id = NEW.doctor_id;
+
+        INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+        VALUES (
+            'NEW LAB TEST ORDERED',
+            CONCAT('Doctor ', COALESCE(v_doc_name, 'Physician'), ' ordered ', NEW.test_type, ' for patient ', COALESCE(v_patient_name, CONCAT('ID #', NEW.patient_id)), '.'),
+            'LAB_ORDER_NEW',
+            'nurse',
+            JSON_OBJECT('lab_id', NEW.lab_id, 'patient_id', NEW.patient_id, 'test_type', NEW.test_type),
+            NOW()
+        );
+    END IF;
+END //
+
+-- maleesha --
+
+CREATE TRIGGER trg_patient_notify_on_prescription
+AFTER INSERT ON `Prescriptions`
+FOR EACH ROW
+BEGIN
+    DECLARE v_patient_id      INT DEFAULT NULL;
+    DECLARE v_patient_user_id INT DEFAULT NULL;
+    DECLARE v_doctor_id       INT DEFAULT NULL;
+    DECLARE v_doctor_name     VARCHAR(150) DEFAULT NULL;
+
+    SELECT patient_id, doctor_id INTO v_patient_id, v_doctor_id
+    FROM `Medical_Records`
+    WHERE `record_id` = NEW.record_id
+    LIMIT 1;
+
+    IF v_patient_id IS NOT NULL THEN
+        SELECT user_id INTO v_patient_user_id
+        FROM `Patients`
+        WHERE `patient_id` = v_patient_id
+        LIMIT 1;
+    END IF;
+
+    IF v_doctor_id IS NOT NULL THEN
+        SELECT CONCAT(first_name, ' ', last_name) INTO v_doctor_name
+        FROM `Staff`
+        WHERE `staff_id` = v_doctor_id
+        LIMIT 1;
+    END IF;
+
+    IF v_patient_user_id IS NOT NULL THEN
+        INSERT INTO `Notifications` (
+            title,
+            message,
+            type,
+            target_role,
+            target_user_id,
+            is_read,
+            details,
+            created_at
+        )
+        VALUES (
+            'New Prescription Issued',
+            CONCAT('Dr. ', COALESCE(v_doctor_name, 'Your doctor'), ' prescribed ', NEW.med_name, ' (', NEW.dosage, ') for you.'),
+            'INFO',
+            'patient',
+            v_patient_user_id,
+            FALSE,
+            JSON_OBJECT(
+                'rx_id', NEW.rx_id,
+                'record_id', NEW.record_id,
+                'med_name', NEW.med_name,
+                'dosage', NEW.dosage,
+                'duration', NEW.duration,
+                'status', NEW.status
+            ),
+            NOW()
+        );
+    END IF;
+END //
+
+CREATE TRIGGER `trg_patient_notify_on_medical_record`
+AFTER INSERT ON `Medical_Records`
+FOR EACH ROW
+BEGIN
+    DECLARE v_patient_user_id INT DEFAULT NULL;
+    DECLARE v_doctor_name     VARCHAR(150) DEFAULT NULL;
+
+    SELECT user_id INTO v_patient_user_id
+    FROM `Patients`
+    WHERE `patient_id` = NEW.patient_id
+    LIMIT 1;
+
+    SELECT CONCAT(first_name, ' ', last_name) INTO v_doctor_name
+    FROM `Staff`
+    WHERE `staff_id` = NEW.doctor_id
+    LIMIT 1;
+
+    IF v_patient_user_id IS NOT NULL THEN
+        INSERT INTO `Notifications` (
+            title,
+            message,
+            type,
+            target_role,
+            target_user_id,
+            is_read,
+            details,
+            created_at
+        )
+        VALUES (
+            'New Medical Record Available',
+            CONCAT('Dr. ', COALESCE(v_doctor_name, 'Your doctor'), ' has added a new medical consultation record for your visit.'),
+            'INFO',
+            'patient',
+            v_patient_user_id,
+            FALSE,
+            JSON_OBJECT(
+                'record_id', NEW.record_id,
+                'patient_id', NEW.patient_id,
+                'doctor_id', NEW.doctor_id,
+                'diagnosis', NEW.diagnosis
             ),
             NOW()
         );
