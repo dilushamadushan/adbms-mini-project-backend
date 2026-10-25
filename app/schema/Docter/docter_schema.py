@@ -130,6 +130,26 @@ class PatientAppointmentDetailsResponse(BaseModel):
     reason: str
 
 
+class CurrentAdmittedPatientResponse(BaseModel):
+    admission_id: int
+    patient_id: int
+    patient_name: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    ward_name: Optional[str] = None
+    bed_number: Optional[str] = None
+    admission_reason: Optional[str] = None
+    admitted_at: Optional[str] = None
+    status: str
+
+    @field_validator("admitted_at", mode="before")
+    @classmethod
+    def serialize_admitted_at(cls, value: Any) -> Optional[str]:
+        return str(value) if value is not None else None
+
+
 class LabOrderPatientDetailsResponse(BaseModel):
     patient_id: int
     patient_name: str

@@ -413,6 +413,27 @@ def get_ward_names(conn: MySQLConnection) -> list[dict]:
         cursor.close()
 
 
+def get_current_admitted_patients(conn: MySQLConnection) -> list[dict]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT admission_id, patient_id, patient_name, age, gender,
+                   blood_group, allergies, ward_name, bed_number,
+                   admission_reason, admitted_at, status
+            FROM vw_current_admitted_patients
+            ORDER BY admitted_at DESC
+            """
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            if row.get("admitted_at") is not None:
+                row["admitted_at"] = str(row["admitted_at"])
+        return rows
+    finally:
+        cursor.close()
+
+
 def create_admission_request(
     conn: MySQLConnection,
     patient_id: int,

@@ -23,12 +23,26 @@ from app.schema.Docter.docter_schema import (
     CreateLabOrderResponse,
     PatientLabResultResponse,
     DoctorCurrentScheduleResponse,
+    CurrentAdmittedPatientResponse,
 )
 from app.services.Docter import docter_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/doctor", tags=["Doctor"])
+
+
+@router.get(
+    "/current-admitted",
+    response_model=List[CurrentAdmittedPatientResponse],
+)
+def get_current_admitted_patients():
+    try:
+        return docter_service.get_current_admitted_patients()
+    except Exception as e:
+        logger.exception("Failed to get currently admitted patients: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to get currently admitted patients")
+
 
 @router.get("/medicines", response_model=List[DoctorMedicineResponse])
 def get_doctor_medicines():

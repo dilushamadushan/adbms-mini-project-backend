@@ -172,6 +172,11 @@ def get_ward_names():
         return docter_repo.get_ward_names(conn)
 
 
+def get_current_admitted_patients():
+    with get_db() as conn:
+        return docter_repo.get_current_admitted_patients(conn)
+
+
 def create_admission_request(
     patient_id: int,
     gender: str,

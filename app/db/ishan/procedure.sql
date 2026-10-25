@@ -750,6 +750,7 @@ DELIMITER ;
 --   - Appointment slots are generated from 09:00 AM to 04:30 PM.
 --   - The lunch period from 12:00 PM to 12:30 PM is excluded.
 
+
 DELIMITER //
 
 -- Remove the old version before creating the updated procedure.
