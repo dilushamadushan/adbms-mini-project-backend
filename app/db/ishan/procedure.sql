@@ -658,6 +658,84 @@ DELIMITER ;
 
 
 
+
+-- Creates a new pending lab order with an empty result.
+
+DROP PROCEDURE IF EXISTS sp_create_lab_order;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_create_lab_order(
+    IN p_patient_id INT,
+    IN p_doctor_id INT,
+    IN p_test_type VARCHAR(100)
+)
+BEGIN
+    DECLARE v_lab_id INT;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM Patients
+        WHERE patient_id = p_patient_id
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Patient not found';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM Staff s
+        INNER JOIN Users u
+            ON u.user_id = s.user_id
+        WHERE s.staff_id = p_doctor_id
+          AND LOWER(u.role) = 'doctor'
+          AND u.is_active = TRUE
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Active doctor not found';
+    END IF;
+
+    IF p_test_type IS NULL OR TRIM(p_test_type) = '' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Test type is required';
+    END IF;
+
+    INSERT INTO Lab_Orders (
+        patient_id,
+        doctor_id,
+        test_type,
+        status,
+        results_text
+    )
+    VALUES (
+        p_patient_id,
+        p_doctor_id,
+        TRIM(p_test_type),
+        'Pending',
+        ''
+    );
+
+    SET v_lab_id = LAST_INSERT_ID();
+
+    SELECT
+        lab_id,
+        patient_id,
+        doctor_id,
+        test_type,
+        status,
+        results_text,
+        ordered_at,
+        updated_at
+    FROM Lab_Orders
+    WHERE lab_id = v_lab_id;
+END$$
+
+DELIMITER ;
+
+
+
+
+
 -----------------------patient------------------------------------------
 
 
