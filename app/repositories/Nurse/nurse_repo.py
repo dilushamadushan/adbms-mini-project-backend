@@ -462,3 +462,45 @@ def get_ward_nursing_notes(conn: MySQLConnection) -> List[Dict[str, Any]]:
         cursor.close()
 
 
+def get_nurse_lab_orders(conn: MySQLConnection, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("sp_get_nurse_lab_orders", (status_filter or "All",))
+        results = []
+        for r in cursor.stored_results():
+            for row in r.fetchall():
+                results.append(_serialize_row(row))
+        return results
+    finally:
+        cursor.close()
+
+
+def complete_lab_order(
+    conn: MySQLConnection, lab_id: int, nurse_user_id: int, results_text: str
+) -> Dict[str, Any]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("sp_complete_lab_order", (lab_id, nurse_user_id, results_text))
+        for r in cursor.stored_results():
+            row = r.fetchone()
+            if row:
+                return _serialize_row(row)
+        return {"lab_id": lab_id, "status": "Completed"}
+    finally:
+        cursor.close()
+
+
+def get_pending_lab_count(conn: MySQLConnection) -> int:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("sp_get_pending_lab_count")
+        for r in cursor.stored_results():
+            row = r.fetchone()
+            if row:
+                return int(row.get("pending_count", 0))
+        return 0
+    finally:
+        cursor.close()
+
+
+

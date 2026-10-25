@@ -294,4 +294,30 @@ class NurseStaffItem(BaseModel):
     specialty: Optional[str] = None
 
 
+class LabOrderCompleteRequest(BaseModel):
+    results_text: str = Field(..., description="Full clinical lab results findings")
+
+
+class NurseLabOrderItem(BaseModel):
+    lab_id: int
+    patient_id: int
+    patient_name: str
+    age: Optional[int] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    bed_number: Optional[str] = None
+    bed_id: Optional[int] = None
+    ward_id: Optional[int] = None
+    ward_name: Optional[str] = None
+    test_type: str
+    status: str
+    results_text: Optional[str] = None
+    doctor_name: Optional[str] = None
+    doctor_id: Optional[int] = None
+    ordered_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+
 

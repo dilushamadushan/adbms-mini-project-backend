@@ -797,9 +797,9 @@ BEGIN
     FROM Admissions adm
     INNER JOIN Patients p ON adm.patient_id = p.patient_id
     LEFT JOIN Staff doc ON adm.admitted_doctor_id = doc.staff_id
-    WHERE adm.status = 'Admitted'
+    WHERE adm.status = 'Pending'
       AND (adm.bed_id IS NULL OR adm.bed_id = 0)
-      AND (adm.ward_id = p_ward_id OR p_ward_id IS NULL OR adm.ward_id IS NULL)
+      AND (p_ward_id IS NULL OR adm.ward_id = p_ward_id)
     ORDER BY adm.admitted_at ASC;
 END //
 
@@ -812,11 +812,12 @@ CREATE PROCEDURE sp_nurse_assign_bed(
 )
 BEGIN
     DECLARE v_patient_id INT;
-    DECLARE v_ward_id INT;
+    DECLARE v_bed_ward_id INT;
+    DECLARE v_adm_ward_id INT;
     DECLARE v_bed_status VARCHAR(20);
     DECLARE v_adm_status VARCHAR(20);
 
-    SELECT status, ward_id INTO v_bed_status, v_ward_id FROM Beds WHERE bed_id = p_bed_id;
+    SELECT status, ward_id INTO v_bed_status, v_bed_ward_id FROM Beds WHERE bed_id = p_bed_id;
     IF v_bed_status IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Specified bed does not exist.';
     END IF;
@@ -825,20 +826,28 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Bed is not available for patient assignment.';
     END IF;
 
-    SELECT patient_id, status INTO v_patient_id, v_adm_status FROM Admissions WHERE admission_id = p_admission_id;
+    SELECT patient_id, ward_id, status INTO v_patient_id, v_adm_ward_id, v_adm_status 
+    FROM Admissions 
+    WHERE admission_id = p_admission_id;
+
     IF v_patient_id IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Specified admission record does not exist.';
     END IF;
 
-    IF v_adm_status != 'Admitted' THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Patient admission is not active.';
+    IF v_adm_status NOT IN ('Pending', 'Admitted') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Patient admission is not pending or active.';
+    END IF;
+
+    IF v_adm_ward_id IS NOT NULL AND v_bed_ward_id != v_adm_ward_id THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Patient can only be assigned to a bed within their designated ward.';
     END IF;
 
     START TRANSACTION;
 
     UPDATE Admissions 
     SET bed_id = p_bed_id, 
-        ward_id = v_ward_id, 
+        ward_id = v_bed_ward_id, 
+        status = 'Admitted',
         updated_at = NOW() 
     WHERE admission_id = p_admission_id;
 
@@ -854,11 +863,139 @@ BEGIN
         p_admission_id AS admission_id,
         p_bed_id AS bed_id,
         v_patient_id AS patient_id,
-        v_ward_id AS ward_id,
+        v_bed_ward_id AS ward_id,
         'Occupied' AS bed_status,
+        'Admitted' AS admission_status,
         'Patient successfully assigned to bed.' AS message;
 END //
 
 DELIMITER ;
+
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_nurse_lab_orders //
+
+CREATE PROCEDURE sp_get_nurse_lab_orders(
+    IN p_status VARCHAR(20)
+)
+BEGIN
+    SELECT 
+        lo.lab_id,
+        lo.patient_id,
+        CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+        TIMESTAMPDIFF(YEAR, p.dob, CURDATE()) AS age,
+        p.blood_group,
+        p.allergies,
+        p.emergency_contact,
+        COALESCE(b.bed_number, 'Outpatient') AS bed_number,
+        b.bed_id,
+        adm.ward_id,
+        COALESCE(w.ward_name, 'Outpatient Clinic') AS ward_name,
+        lo.test_type,
+        lo.status,
+        lo.results_text,
+        CONCAT('Dr. ', doc.first_name, ' ', doc.last_name) AS doctor_name,
+        lo.doctor_id,
+        DATE_FORMAT(lo.ordered_at, '%Y-%m-%d %H:%i') AS ordered_at,
+        DATE_FORMAT(lo.updated_at, '%Y-%m-%d %H:%i') AS updated_at
+    FROM Lab_Orders lo
+    INNER JOIN Patients p ON lo.patient_id = p.patient_id
+    INNER JOIN Staff doc ON lo.doctor_id = doc.staff_id
+    LEFT JOIN Admissions adm ON (adm.patient_id = p.patient_id AND adm.status = 'Admitted')
+    LEFT JOIN Beds b ON adm.bed_id = b.bed_id
+    LEFT JOIN Wards w ON adm.ward_id = w.ward_id
+    WHERE (p_status IS NULL OR p_status = '' OR p_status = 'All' OR lo.status = p_status)
+    ORDER BY lo.ordered_at DESC;
+END //
+
+DELIMITER ;
+
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_complete_lab_order //
+
+CREATE PROCEDURE sp_complete_lab_order(
+    IN p_lab_id INT,
+    IN p_nurse_user_id INT,
+    IN p_results_text TEXT
+)
+BEGIN
+    DECLARE v_patient_id INT;
+    DECLARE v_doctor_id INT;
+    DECLARE v_test_type VARCHAR(100);
+    DECLARE v_current_status VARCHAR(20);
+    DECLARE v_patient_name VARCHAR(200);
+    DECLARE v_doc_user_id INT;
+
+    SELECT patient_id, doctor_id, test_type, status
+    INTO v_patient_id, v_doctor_id, v_test_type, v_current_status
+    FROM Lab_Orders
+    WHERE lab_id = p_lab_id;
+
+    IF v_patient_id IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Lab order does not exist.';
+    END IF;
+
+    IF v_current_status = 'Completed' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Lab order has already been completed.';
+    END IF;
+
+    UPDATE Lab_Orders
+    SET status = 'Completed',
+        results_text = p_results_text,
+        updated_at = NOW()
+    WHERE lab_id = p_lab_id;
+
+    SELECT CONCAT(first_name, ' ', last_name) INTO v_patient_name
+    FROM Patients
+    WHERE patient_id = v_patient_id;
+
+    SELECT user_id INTO v_doc_user_id
+    FROM Staff
+    WHERE staff_id = v_doctor_id;
+
+    IF v_doc_user_id IS NOT NULL THEN
+        INSERT INTO Notifications (title, message, type, target_role, target_user_id, details, created_at)
+        VALUES (
+            'LAB TEST COMPLETED',
+            CONCAT('Results completed for ', v_test_type, ' (Patient: ', COALESCE(v_patient_name, CONCAT('ID #', v_patient_id)), ').'),
+            'LAB_RESULT_COMPLETED',
+            'doctor',
+            v_doc_user_id,
+            JSON_OBJECT('lab_id', p_lab_id, 'patient_id', v_patient_id, 'test_type', v_test_type),
+            NOW()
+        );
+    END IF;
+
+    SELECT 
+        lab_id,
+        patient_id,
+        doctor_id,
+        test_type,
+        status,
+        results_text,
+        DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
+    FROM Lab_Orders
+    WHERE lab_id = p_lab_id;
+END //
+
+DELIMITER ;
+
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_pending_lab_count //
+
+CREATE PROCEDURE sp_get_pending_lab_count()
+BEGIN
+    SELECT COUNT(*) AS pending_count
+    FROM Lab_Orders
+    WHERE status = 'Pending';
+END //
+
+DELIMITER ;
+
 
 
