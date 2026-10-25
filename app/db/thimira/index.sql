@@ -1,40 +1,51 @@
--- ==============================================================================
--- Pharmacy Management Performance Indexes (Thimira)
--- Module: Inventory Optimization Indexes
--- ==============================================================================
-
 USE hms;
 
-DELIMITER //
 
-DROP PROCEDURE IF EXISTS sp_create_index_safe //
 
-CREATE PROCEDURE sp_create_index_safe(
-    IN p_table_name VARCHAR(64),
-    IN p_index_name VARCHAR(64),
-    IN p_index_cols VARCHAR(255)
-)
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.statistics 
-        WHERE table_schema = DATABASE() 
-          AND table_name = p_table_name 
-          AND index_name = p_index_name
-    ) THEN
-        SET @s = CONCAT('CREATE INDEX ', p_index_name, ' ON ', p_table_name, ' (', p_index_cols, ')');
-        PREPARE stmt FROM @s;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END IF;
-END //
+-- 1. Speeds up low stock alerts and dashboard inventory valuation
+CREATE INDEX idx_medicines_stock_reorder 
+ON Medicines (is_active, stock_qty, reorder_level);
 
-DELIMITER ;
+-- 2. Speeds up finding expiring and expired medicines
+CREATE INDEX idx_medicines_active_expiry 
+ON Medicines (is_active, expiry_date);
 
-CALL sp_create_index_safe('Medicines', 'idx_medicines_stock_reorder', 'is_active, stock_qty, reorder_level');
-CALL sp_create_index_safe('Medicines', 'idx_medicines_active_expiry', 'is_active, expiry_date');
-CALL sp_create_index_safe('Medicines', 'idx_medicines_generic_active', 'generic_name, is_active');
-CALL sp_create_index_safe('Dispensations', 'idx_dispensations_date_med', 'dispensed_at, medicine_id');
-CALL sp_create_index_safe('Stock_Receipts', 'idx_receipts_med_date', 'medicine_id, received_at');
-CALL sp_create_index_safe('Purchase_Orders', 'idx_po_status_delivery', 'status, expected_delivery_date');
+-- 3. Speeds up searching medicines by generic name
+CREATE INDEX idx_medicines_generic_active 
+ON Medicines (generic_name, is_active);
 
-DROP PROCEDURE IF EXISTS sp_create_index_safe;
+-- 4. Speeds up direct expiry date lookups
+CREATE INDEX idx_med_expiry 
+ON Medicines (expiry_date);
+
+-- 5. Speeds up stock quantity and reorder threshold checks
+CREATE INDEX idx_med_stock 
+ON Medicines (stock_qty, reorder_level);
+
+-- 6. Speeds up daily dispensing reports and revenue summaries
+CREATE INDEX idx_dispensations_date_med 
+ON Dispensations (dispensed_at, medicine_id);
+
+-- 7. Speeds up viewing dispensing history by pharmacist
+CREATE INDEX idx_disp_pharmacist 
+ON Dispensations (pharmacist_id, dispensed_at);
+
+-- 8. Speeds up tracking frequently dispensed medicines
+CREATE INDEX idx_disp_medicine 
+ON Dispensations (medicine_id, dispensed_at);
+
+-- 9. Speeds up auditing incoming medicine restock receipts
+CREATE INDEX idx_receipts_med_date 
+ON Stock_Receipts (medicine_id, received_at);
+
+-- 10. Speeds up tracking purchase orders and overdue delivery alerts
+CREATE INDEX idx_po_status_delivery 
+ON Purchase_Orders (status, expected_delivery_date);
+
+-- 11. Speeds up filtering purchase orders by order date
+CREATE INDEX idx_order_date 
+ON Purchase_Orders (order_date);
+
+-- 12. Speeds up filtering purchase orders by approval/delivery status
+CREATE INDEX idx_order_status 
+ON Purchase_Orders (status);
