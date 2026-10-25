@@ -1,21 +1,29 @@
--- TG/1407 --
-
 DROP TRIGGER IF EXISTS trg_audit_refresh_token_issued;
 DROP TRIGGER IF EXISTS trg_audit_refresh_token_revoked;
-DROP TRIGGER IF EXISTS trg_audit_refresh_token_deleted; 
+DROP TRIGGER IF EXISTS trg_audit_refresh_token_deleted;
+
 DROP TRIGGER IF EXISTS trg_prevent_department_self_parent;
 DROP TRIGGER IF EXISTS trg_audit_department_created;
-DROP TRIGGER IF EXISTS trg_audit_department_deleted; 
+DROP TRIGGER IF EXISTS trg_audit_department_deleted;
+
 DROP TRIGGER IF EXISTS trg_notify_staff_created;
 DROP TRIGGER IF EXISTS trg_notify_department_created;
-DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment;
-DROP TRIGGER IF EXISTS trg_notify_admission_created; 
-DROP TRIGGER IF EXISTS trg_prevent_duplicate_open_admission; 
-DROP TRIGGER IF EXISTS trg_notify_admission_confirmed; 
-DROP TRIGGER IF EXISTS trg_notify_admission_inserted;
 DROP TRIGGER IF EXISTS trg_notify_department_deleted;
 
+DROP TRIGGER IF EXISTS trg_prevent_duplicate_open_admission;
+DROP TRIGGER IF EXISTS trg_prevent_duplicate_admission_assignment;
+DROP TRIGGER IF EXISTS trg_notify_admission_inserted;
+
+DROP TRIGGER IF EXISTS trg_after_stock_receipt_insert;
+DROP TRIGGER IF EXISTS trg_before_dispensation_insert;
+DROP TRIGGER IF EXISTS trg_after_dispensation_insert;
+
+DROP TRIGGER IF EXISTS trg_check_po_delivery_lead_time;
+DROP TRIGGER IF EXISTS trg_check_po_receive_lead_time;
+
 DELIMITER //
+
+-- TG/1407 --
 
 CREATE TRIGGER trg_audit_refresh_token_issued
 AFTER INSERT ON Refresh_Tokens
@@ -183,6 +191,202 @@ BEGIN
         ),
         NOW()
     );
+END //
+
+-- Chavi --
+
+CREATE TRIGGER trg_prevent_duplicate_open_admission
+BEFORE INSERT ON Admissions
+FOR EACH ROW
+BEGIN
+    DECLARE v_locked_patient_id INT;
+    DECLARE v_open_admission_id INT DEFAULT NULL;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_open_admission_id = NULL;
+
+    SELECT patient_id
+    INTO v_locked_patient_id
+    FROM Patients
+    WHERE patient_id = NEW.patient_id
+    FOR UPDATE;
+
+    SELECT a.admission_id
+    INTO v_open_admission_id
+    FROM Admissions a
+    LEFT JOIN Discharges d ON d.admission_id = a.admission_id
+    WHERE a.patient_id = NEW.patient_id
+      AND (d.admission_id IS NULL OR d.status <> 'Discharged')
+    LIMIT 1;
+
+    IF v_open_admission_id IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Patient already has an open admission. Complete discharge before admitting again.';
+    END IF;
+END //
+
+CREATE TRIGGER trg_prevent_duplicate_admission_assignment
+BEFORE UPDATE ON Admissions
+FOR EACH ROW
+BEGIN
+    DECLARE v_open_admission_id INT DEFAULT NULL;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_open_admission_id = NULL;
+
+    IF NEW.status = 'Admitted' AND OLD.status <> 'Admitted' THEN
+        SELECT a.admission_id
+        INTO v_open_admission_id
+        FROM Admissions a
+        LEFT JOIN Discharges d ON d.admission_id = a.admission_id
+        WHERE a.patient_id = NEW.patient_id
+          AND a.admission_id <> NEW.admission_id
+          AND (d.admission_id IS NULL OR d.status <> 'Discharged')
+        LIMIT 1;
+
+        IF v_open_admission_id IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Patient already has an open admission. Complete discharge before admitting again.';
+        END IF;
+    END IF;
+END //
+
+CREATE TRIGGER trg_notify_admission_inserted
+AFTER INSERT ON Admissions
+FOR EACH ROW
+BEGIN
+    DECLARE v_patient_name VARCHAR(201);
+    DECLARE v_ward_name VARCHAR(100);
+    DECLARE v_bed_number VARCHAR(20);
+
+    SELECT CONCAT(p.first_name, ' ', p.last_name), w.ward_name, b.bed_number
+    INTO v_patient_name, v_ward_name, v_bed_number
+    FROM Patients p
+    JOIN Wards w ON w.ward_id = NEW.ward_id
+    LEFT JOIN Beds b ON b.bed_id = NEW.bed_id
+    WHERE p.patient_id = NEW.patient_id;
+
+    INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+    VALUES (
+        'New Patient Admission',
+        CONCAT('Admission request for ', v_patient_name, ' in ', v_ward_name, ' has been created.'),
+        'PATIENT_ADMITTED',
+        'all',
+        JSON_OBJECT(
+            'admission_id', NEW.admission_id,
+            'patient_id', NEW.patient_id,
+            'patient_name', v_patient_name,
+            'ward_id', NEW.ward_id,
+            'ward_name', v_ward_name,
+            'bed_id', NEW.bed_id,
+            'bed_number', v_bed_number,
+            'admitted_doctor_id', NEW.admitted_doctor_id,
+            'admitted_by', NEW.admitted_by,
+            'admitted_at', NEW.admitted_at,
+            'admission_reason', NEW.admission_reason,
+            'guardian_name', NEW.guardian_name,
+            'guardian_relationship', NEW.guardian_relationship,
+            'guardian_contact', NEW.guardian_contact,
+            'gender', NEW.gender,
+            'status', NEW.status
+        ),
+        NOW()
+    );
+END //
+
+-- thimira --
+
+CREATE TRIGGER trg_after_stock_receipt_insert
+AFTER INSERT ON Stock_Receipts
+FOR EACH ROW
+BEGIN
+    UPDATE Medicines
+    SET 
+        stock_qty = stock_qty + NEW.quantity,
+        expiry_date = COALESCE(NEW.expiry_date, expiry_date),
+        is_active = TRUE
+    WHERE medicine_id = NEW.medicine_id;
+
+    INSERT INTO Audit_Logs (actor_id, action_type, resource_table, details, timestamp)
+    VALUES (
+        NEW.received_by,
+        'STOCK_RECEIVED',
+        'Medicines',
+        JSON_OBJECT(
+            'medicine_id', NEW.medicine_id,
+            'received_qty', NEW.quantity,
+            'receipt_id', NEW.receipt_id
+        ),
+        NOW()
+    );
+END //
+
+CREATE TRIGGER trg_before_dispensation_insert
+BEFORE INSERT ON Dispensations
+FOR EACH ROW
+BEGIN
+    DECLARE current_stock INT DEFAULT 0;
+
+    SELECT stock_qty INTO current_stock
+    FROM Medicines
+    WHERE medicine_id = NEW.medicine_id;
+
+    IF current_stock < NEW.quantity THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Insufficient stock available for this medication';
+    END IF;
+END //
+
+CREATE TRIGGER trg_after_dispensation_insert
+AFTER INSERT ON Dispensations
+FOR EACH ROW
+BEGIN
+    DECLARE remaining_stock INT;
+    DECLARE reorder_lvl INT;
+    DECLARE med_title VARCHAR(100);
+
+    UPDATE Medicines
+    SET stock_qty = stock_qty - NEW.quantity
+    WHERE medicine_id = NEW.medicine_id;
+
+    SELECT stock_qty, reorder_level, med_name 
+    INTO remaining_stock, reorder_lvl, med_title
+    FROM Medicines
+    WHERE medicine_id = NEW.medicine_id;
+
+    IF remaining_stock <= reorder_lvl THEN
+        INSERT INTO Notifications (title, message, type, target_role, details, created_at)
+        VALUES (
+            'Low Stock Alert',
+            CONCAT('Warning: Medicine "', med_title, '" stock is low (Remaining: ', remaining_stock, ', Threshold: ', reorder_lvl, ').'),
+            'LOW_STOCK',
+            'pharmacist',
+            JSON_OBJECT(
+                'medicine_id', NEW.medicine_id,
+                'remaining_stock', remaining_stock,
+                'reorder_level', reorder_lvl
+            ),
+            NOW()
+        );
+    END IF;
+END //
+
+CREATE TRIGGER trg_check_po_delivery_lead_time
+BEFORE INSERT ON Purchase_Orders
+FOR EACH ROW
+BEGIN
+    IF NEW.expected_delivery_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Restock lead time must be at least 1 day. Expected delivery date must be at least 1 day in advance.';
+    END IF;
+END //
+
+CREATE TRIGGER trg_check_po_receive_lead_time
+BEFORE UPDATE ON Purchase_Orders
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'RECEIVED' AND OLD.status != 'RECEIVED' THEN
+        IF DATEDIFF(CURDATE(), DATE(OLD.order_date)) < 1 AND CURDATE() < OLD.expected_delivery_date THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot confirm stock receipt before 1 day from the order date. The order is still in transit from the supplier.';
+        END IF;
+    END IF;
 END //
 
 DELIMITER ;

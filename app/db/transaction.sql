@@ -1,11 +1,3 @@
--- ============================================================================
--- MediCore HMS - Advanced Database Management System (ADBMS) Transactions
--- Artifact: transaction.sql
--- Description: ACID-compliant stored procedure transactions demonstrating
---              pessimistic locking (SELECT ... FOR UPDATE), savepoints,
---              custom integrity validation, and atomic multi-table mutations.
--- ============================================================================
-
 DROP PROCEDURE IF EXISTS sp_admit_patient_transaction;
 DROP PROCEDURE IF EXISTS sp_dispense_prescription_transaction;
 
@@ -13,15 +5,6 @@ DELIMITER //
 
 -- ============================================================================
 -- Transaction 1: Atomic Inpatient Admission & Bed Allocation
--- ----------------------------------------------------------------------------
--- ACID Highlights:
--- - Atomicity: Ensures admission record creation, bed occupancy update,
---              initial doctor order, and notification succeed or fail together.
--- - Consistency: Validates bed availability and patient open-admission status
---                before mutating state.
--- - Isolation: Uses SELECT ... FOR UPDATE (pessimistic locking) on Beds and
---              Patients to prevent race conditions during concurrent allocations.
--- - Durability: Changes committed to disk via InnoDB redo logs.
 -- ============================================================================
 CREATE PROCEDURE sp_admit_patient_transaction(
     IN p_patient_id INT,
@@ -44,7 +27,6 @@ proc_label: BEGIN
     DECLARE v_patient_exists INT DEFAULT 0;
     DECLARE v_doctor_exists INT DEFAULT 0;
 
-    -- Exit handler: rollback and rethrow if unexpected SQL exception occurs
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -53,10 +35,8 @@ proc_label: BEGIN
         RESIGNAL;
     END;
 
-    -- Begin atomic transaction
     START TRANSACTION;
 
-    -- 1. Validate patient existence and lock patient record
     SELECT COUNT(*) INTO v_patient_exists 
     FROM Patients 
     WHERE patient_id = p_patient_id 
@@ -68,7 +48,6 @@ proc_label: BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Patient record does not exist';
     END IF;
 
-    -- 2. Validate doctor existence
     SELECT COUNT(*) INTO v_doctor_exists 
     FROM Staff 
     WHERE staff_id = p_doctor_id;
@@ -79,7 +58,6 @@ proc_label: BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Admitting doctor does not exist';
     END IF;
 
-    -- 3. Check for existing active admission for this patient
     SELECT a.admission_id INTO v_active_admission
     FROM Admissions a
     LEFT JOIN Discharges d ON d.admission_id = a.admission_id
@@ -94,7 +72,6 @@ proc_label: BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Integrity violation: Patient already has an active admission.';
     END IF;
 
-    -- 4. Pessimistic lock on the requested bed
     SELECT status, current_patient_id INTO v_bed_status, v_current_bed_patient
     FROM Beds
     WHERE bed_id = p_bed_id AND ward_id = p_ward_id
@@ -112,7 +89,6 @@ proc_label: BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Conflict: Requested bed is currently occupied or undergoing cleaning.';
     END IF;
 
-    -- 5. Insert admission record
     INSERT INTO Admissions (
         patient_id, ward_id, bed_id, admitted_doctor_id, admitted_by,
         admitted_at, admission_reason, guardian_name, guardian_relationship,
@@ -125,17 +101,14 @@ proc_label: BEGIN
 
     SET p_admission_id = LAST_INSERT_ID();
 
-    -- Savepoint after admission record is created
     SAVEPOINT sp_admission_created;
 
-    -- 6. Allocate bed: update Bed status to 'Occupied' and assign current patient
     UPDATE Beds
     SET status = 'Occupied',
         current_patient_id = p_patient_id,
         updated_at = NOW()
     WHERE bed_id = p_bed_id;
 
-    -- 7. Insert initial clinical Doctor Order for patient care plan
     INSERT INTO Doctor_Orders (
         patient_id, doctor_id, order_type, instruction,
         status, created_at
@@ -145,7 +118,6 @@ proc_label: BEGIN
         'Pending', NOW()
     );
 
-    -- 8. Audit log entry
     INSERT INTO Audit_Logs (actor_id, action_type, resource_table, details, timestamp)
     VALUES (
         p_admitted_by,
@@ -161,7 +133,6 @@ proc_label: BEGIN
         NOW()
     );
 
-    -- Commit transaction
     COMMIT;
     SET p_status_message = 'Patient admitted and bed allocated successfully.';
 END //
@@ -169,14 +140,6 @@ END //
 
 -- ============================================================================
 -- Transaction 2: Atomic Prescription Dispensation & Medicine Stock Accounting
--- ----------------------------------------------------------------------------
--- ACID Highlights:
--- - Atomicity: Dispensation billing, inventory stock depletion, and MAR
---              administration linkage execute as a single atomic unit of work.
--- - Consistency: Validates available inventory quantity against requested dosage.
--- - Isolation: Uses SELECT ... FOR UPDATE on Medicines to prevent overselling
---              or race conditions from concurrent pharmacist dispensing.
--- - Durability: Guaranteed persistent state updates via InnoDB engine commit.
 -- ============================================================================
 CREATE PROCEDURE sp_dispense_prescription_transaction(
     IN p_rx_id INT,
@@ -194,7 +157,6 @@ proc_label: BEGIN
     DECLARE v_record_id INT;
     DECLARE v_total_stock INT DEFAULT 0;
 
-    -- Exit handler: rollback and rethrow on error
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -204,17 +166,14 @@ proc_label: BEGIN
         RESIGNAL;
     END;
 
-    -- Begin atomic transaction
     START TRANSACTION;
 
-    -- 1. Validate requested quantity
     IF p_quantity <= 0 THEN
         ROLLBACK;
         SET p_status_message = 'Requested dispensation quantity must be greater than zero.';
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid quantity: Dispense quantity must be positive.';
     END IF;
 
-    -- 2. Validate prescription and lock row
     SELECT p.record_id, mr.patient_id
     INTO v_record_id, v_patient_id
     FROM Prescriptions p
@@ -228,7 +187,6 @@ proc_label: BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Prescription record does not exist.';
     END IF;
 
-    -- 3. Pessimistic lock on the medicine inventory row
     SELECT med_name, unit_price
     INTO v_med_name, v_unit_price
     FROM Medicines
@@ -241,7 +199,6 @@ proc_label: BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Medicine not found in pharmacy inventory.';
     END IF;
 
-    -- 4. Calculate total stock available from receipts vs previous dispensations
     SELECT 
         COALESCE((SELECT SUM(quantity) FROM Stock_Receipts WHERE medicine_id = p_medicine_id), 0) -
         COALESCE((SELECT SUM(quantity) FROM Dispensations WHERE medicine_id = p_medicine_id), 0)
@@ -253,10 +210,8 @@ proc_label: BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insufficient pharmacy inventory stock.';
     END IF;
 
-    -- 5. Calculate total cost
     SET p_total_price = ROUND(v_unit_price * p_quantity, 2);
 
-    -- 6. Insert dispensation record
     INSERT INTO Dispensations (
         rx_id, medicine_id, pharmacist_id, quantity,
         total_price, dispensed_at
@@ -267,10 +222,8 @@ proc_label: BEGIN
 
     SET p_dispense_id = LAST_INSERT_ID();
 
-    -- Savepoint after inventory dispensation record
     SAVEPOINT sp_dispensation_recorded;
 
-    -- 7. Automatically create Medication Administration Record (MAR) entry for nurses
     INSERT INTO Medication_Administration_Records (
         rx_id, patient_id, administered_by, scheduled_time,
         status, notes, administered_at
@@ -280,7 +233,6 @@ proc_label: BEGIN
         NOW()
     );
 
-    -- 8. Audit log entry
     INSERT INTO Audit_Logs (actor_id, action_type, resource_table, details, timestamp)
     VALUES (
         p_pharmacist_id,
@@ -296,7 +248,6 @@ proc_label: BEGIN
         NOW()
     );
 
-    -- Commit transaction
     COMMIT;
     SET p_status_message = CONCAT('Dispensed ', p_quantity, ' unit(s) of ', v_med_name, ' successfully ($', p_total_price, ').');
 END //

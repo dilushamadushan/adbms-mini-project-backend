@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS Medicines (
     medicine_id    INT AUTO_INCREMENT PRIMARY KEY,
     med_name       VARCHAR(100) NOT NULL UNIQUE,
     generic_name   VARCHAR(100) NULL,
-    unit_price     DECIMAL(10,2) NOT NULL,
+    unit_price     DECIMAL(10,2) NOT NULL COMMENT 'Unit price in Rupees (Rs.)',
     stock_qty      INT NOT NULL DEFAULT 0,
     reorder_level  INT NOT NULL DEFAULT 20,
     expiry_date    DATE NULL,
@@ -246,10 +246,7 @@ CREATE TABLE IF NOT EXISTS Medicines (
     updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT chk_med_stock_nonneg   CHECK (stock_qty >= 0),
     CONSTRAINT chk_med_price_positive CHECK (unit_price > 0),
-    CONSTRAINT chk_med_reorder_nonneg CHECK (reorder_level >= 0),
-    INDEX idx_med_expiry (expiry_date),
-    INDEX idx_med_stock  (stock_qty, reorder_level),
-    FULLTEXT KEY ft_med_name (med_name, generic_name)
+    CONSTRAINT chk_med_reorder_nonneg CHECK (reorder_level >= 0)
 );
  
 CREATE TABLE IF NOT EXISTS Stock_Receipts (
@@ -261,8 +258,7 @@ CREATE TABLE IF NOT EXISTS Stock_Receipts (
     received_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_receipt_qty_positive CHECK (quantity > 0),
     FOREIGN KEY (medicine_id) REFERENCES Medicines(medicine_id),
-    FOREIGN KEY (received_by) REFERENCES Staff(staff_id),
-    INDEX idx_receipt_medicine (medicine_id, received_at)
+    FOREIGN KEY (received_by) REFERENCES Staff(staff_id)
 );
  
 CREATE TABLE IF NOT EXISTS Dispensations (
@@ -272,16 +268,14 @@ CREATE TABLE IF NOT EXISTS Dispensations (
     pharmacist_id      INT NOT NULL,
     admission_id       INT NULL,
     quantity           INT NOT NULL,
-    unit_price_at_sale DECIMAL(10,2) NOT NULL,
+    unit_price_at_sale DECIMAL(10,2) NOT NULL COMMENT 'Sale unit price in Rupees (Rs.)',
     dispensed_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_disp_qty_positive CHECK (quantity > 0),
     UNIQUE KEY uq_one_dispense_per_rx (rx_id),
     FOREIGN KEY (rx_id)         REFERENCES Prescriptions(rx_id),
     FOREIGN KEY (medicine_id)   REFERENCES Medicines(medicine_id),
     FOREIGN KEY (pharmacist_id) REFERENCES Staff(staff_id),
-    FOREIGN KEY (admission_id)  REFERENCES Admissions(admission_id),
-    INDEX idx_disp_pharmacist (pharmacist_id, dispensed_at),
-    INDEX idx_disp_medicine   (medicine_id, dispensed_at)
+    FOREIGN KEY (admission_id)  REFERENCES Admissions(admission_id)
 );
 
 CREATE TABLE IF NOT EXISTS Purchase_Orders (
@@ -296,9 +290,7 @@ CREATE TABLE IF NOT EXISTS Purchase_Orders (
     notes                  TEXT NULL,
     created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (pharmacist_id) REFERENCES Staff(staff_id),
-    INDEX idx_order_date (order_date),
-    INDEX idx_order_status (status)
+    FOREIGN KEY (pharmacist_id) REFERENCES Staff(staff_id)
 );
 
 CREATE TABLE IF NOT EXISTS Purchase_Order_Items (

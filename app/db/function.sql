@@ -1,12 +1,15 @@
--- TG/1407 --
-
 DROP FUNCTION IF EXISTS fn_is_token_active;
 DROP FUNCTION IF EXISTS fn_calculate_provider_avg_time; 
 DROP FUNCTION IF EXISTS fn_get_workload_level; 
 DROP FUNCTION IF EXISTS fn_get_audit_risk; 
 DROP FUNCTION IF EXISTS fn_bed_occupancy_pct; 
+DROP FUNCTION IF EXISTS fn_recep_get_all_patients;
+DROP FUNCTION IF EXISTS fn_calculate_medicine_status;
+DROP FUNCTION IF EXISTS fn_get_total_inventory_value;
 
 DELIMITER //
+
+-- TG/1407 --
 
 CREATE FUNCTION fn_is_token_active(p_token_hash VARCHAR(255))
 RETURNS BOOLEAN
@@ -21,8 +24,6 @@ BEGIN
       AND expires_at > NOW();
     RETURN (v_count > 0);
 END //
-
-
 
 CREATE FUNCTION fn_calculate_provider_avg_time(p_doctor_id INT)
 RETURNS INT
@@ -130,6 +131,77 @@ BEGIN
 
     RETURN ROUND((v_occupied * 100.0) / v_total, 2);
 END //
+
+-- Chavi --
+CREATE FUNCTION fn_recep_get_all_patients()
+RETURNS JSON
+READS SQL DATA
+BEGIN
+    DECLARE v_patients JSON;
+
+    SELECT COALESCE(
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'patient_id', p.patient_id,
+                'user_id', p.user_id,
+                'username', u.username,
+                'email', u.email,
+                'first_name', p.first_name,
+                'last_name', p.last_name,
+                'dob', p.dob,
+                'blood_group', p.blood_group,
+                'emergency_contact', p.emergency_contact,
+                'allergies', p.allergies
+            )
+        ),
+        JSON_ARRAY()
+    )
+    INTO v_patients
+    FROM Patients p
+    JOIN Users u ON u.user_id = p.user_id
+    WHERE LOWER(u.role) = 'patient';
+
+    RETURN v_patients;
+END //
+
+-- thimira --
+CREATE FUNCTION fn_calculate_medicine_status(
+    p_stock INT,
+    p_reorder INT,
+    p_expiry DATE
+)
+RETURNS VARCHAR(30)
+DETERMINISTIC
+NO SQL
+BEGIN
+    IF p_stock <= 0 THEN
+        RETURN 'OUT_OF_STOCK';
+    ELSEIF p_expiry <= CURDATE() THEN
+        RETURN 'EXPIRED';
+    ELSEIF p_expiry <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN
+        RETURN 'EXPIRING_SOON';
+    ELSEIF p_stock <= p_reorder THEN
+        RETURN 'LOW_STOCK';
+    ELSE
+        RETURN 'IN_STOCK';
+    END IF;
+END //
+
+CREATE FUNCTION fn_get_total_inventory_value()
+RETURNS DECIMAL(12,2)
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE total_val DECIMAL(12,2) DEFAULT 0.00;
+
+    SELECT COALESCE(SUM(unit_price * stock_qty), 0.00)
+    INTO total_val
+    FROM Medicines
+    WHERE is_active = TRUE;
+
+    RETURN total_val;
+END //
+
 
 DELIMITER ;
 

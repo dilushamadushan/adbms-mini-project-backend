@@ -131,3 +131,69 @@ FROM Audit_Logs a
 LEFT JOIN Users u ON a.actor_id = u.user_id
 LEFT JOIN Staff s ON u.user_id = s.user_id;
 
+-- Chavi -- 
+
+CREATE OR REPLACE VIEW vw_recep_appointments AS
+SELECT a.apt_id, a.patient_id,
+       CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+       a.doctor_id, CONCAT('Dr. ', s.first_name, ' ', s.last_name) AS doctor_name,
+       a.dept_id, d.dept_name,
+       a.apt_date,
+       TIME_FORMAT(a.time_slot, '%H:%i') AS time_slot,
+       a.status
+FROM Appointments a
+JOIN Patients p ON p.patient_id = a.patient_id
+JOIN Staff s ON s.staff_id = a.doctor_id
+JOIN Departments d ON d.dept_id = a.dept_id;
+
+
+-- thimira --
+
+CREATE OR REPLACE VIEW vw_medicine_inventory AS
+SELECT 
+    m.medicine_id,
+    m.med_name,
+    m.generic_name,
+    m.unit_price,
+    m.stock_qty,
+    m.reorder_level,
+    m.expiry_date,
+    DATEDIFF(m.expiry_date, CURDATE()) AS days_to_expiry,
+    fn_calculate_medicine_status(m.stock_qty, m.reorder_level, m.expiry_date) AS stock_status,
+    (m.unit_price * m.stock_qty) AS inventory_value,
+    m.is_active,
+    m.created_at,
+    m.updated_at
+FROM Medicines m;
+
+CREATE OR REPLACE VIEW vw_near_expiry_alerts AS
+SELECT 
+    m.medicine_id,
+    m.med_name,
+    m.generic_name,
+    m.stock_qty,
+    m.unit_price,
+    m.expiry_date,
+    DATEDIFF(m.expiry_date, CURDATE()) AS days_remaining,
+    CASE 
+        WHEN m.expiry_date <= CURDATE() THEN 'EXPIRED'
+        ELSE 'EXPIRING_SOON'
+    END AS urgency_level
+FROM Medicines m
+WHERE m.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+  AND m.is_active = TRUE
+ORDER BY m.expiry_date ASC;
+
+CREATE OR REPLACE VIEW vw_daily_dispensing_summary AS
+SELECT 
+    DATE(d.dispensed_at) AS dispense_date,
+    COUNT(d.dispense_id) AS total_transactions,
+    SUM(d.quantity) AS total_units_dispensed,
+    SUM(d.quantity * d.unit_price_at_sale) AS total_revenue,
+    COUNT(DISTINCT d.pharmacist_id) AS pharmacists_on_duty,
+    GROUP_CONCAT(DISTINCT m.med_name ORDER BY m.med_name SEPARATOR ', ') AS medicine_names,
+    GROUP_CONCAT(DISTINCT CONCAT(m.med_name, ' (', d.quantity, ' units)') ORDER BY m.med_name SEPARATOR ', ') AS medicines_detail
+FROM Dispensations d
+LEFT JOIN Medicines m ON d.medicine_id = m.medicine_id
+GROUP BY DATE(d.dispensed_at)
+ORDER BY dispense_date DESC;
