@@ -185,6 +185,78 @@ def get_appointments_by_doctor(conn: MySQLConnection, user_id: int) -> list:
     finally:
         cursor.close()
 
+
+def get_doctor_current_schedule(
+    conn: MySQLConnection,
+    doctor_id: int,
+) -> list[dict]:
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.callproc("sp_get_doctor_current_schedule", (doctor_id,))
+        rows: list[dict] = []
+        for result in cursor.stored_results():
+            rows = result.fetchall()
+            break
+
+        cursor.execute(
+            """
+            SELECT
+                a.apt_id,
+                DATE_FORMAT(a.apt_date, '%Y-%m-%d') AS appointment_date,
+                TIME_FORMAT(a.time_slot, '%h:%i %p') AS appointment_time
+            FROM Appointments a
+            WHERE a.doctor_id = %s
+              AND a.apt_date = CURRENT_DATE
+              AND a.status = 'Scheduled'
+            """,
+            (doctor_id,),
+        )
+        appointment_ids = {
+            (row["appointment_date"], row["appointment_time"]): row["apt_id"]
+            for row in cursor.fetchall()
+        }
+
+        for row in rows:
+            key = (str(row["appointment_date"]), row["appointment_time"])
+            appointment_id = appointment_ids.get(key)
+            if row.get("patient_name") or appointment_id is not None:
+                row["slot_status"] = "BOOKED"
+                row["apt_id"] = appointment_id
+            else:
+                row["slot_status"] = "OPEN"
+                row["apt_id"] = None
+        return rows
+    finally:
+        cursor.close()
+
+
+def get_doctor_current_schedule_by_user(
+    conn: MySQLConnection,
+    user_id: int,
+) -> list[dict]:
+    staff_id = _get_staff_id_for_user(conn, user_id)
+    if staff_id is None:
+        raise ValueError("Doctor not found")
+    return get_doctor_current_schedule(conn, staff_id)
+
+
+def staff_doctor_exists(conn: MySQLConnection, doctor_id: int) -> bool:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM Staff
+            WHERE staff_id = %s
+            LIMIT 1
+            """,
+            (doctor_id,),
+        )
+        return cursor.fetchone() is not None
+    finally:
+        cursor.close()
+
+
 def doctor_exists(conn: MySQLConnection, user_id: int) -> bool:
     return _get_staff_id_for_user(conn, user_id) is not None
 

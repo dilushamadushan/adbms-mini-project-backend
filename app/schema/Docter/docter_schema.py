@@ -23,6 +23,24 @@ class DoctorAppointmentResponse(BaseModel):
         return str(v)
 
 
+class DoctorCurrentScheduleResponse(BaseModel):
+    appointment_date: date
+    appointment_time: str
+    slot_status: str
+    apt_id: Optional[int] = None
+    patient_name: Optional[str] = None
+    appointment_status: Optional[str] = None
+
+    @field_validator('appointment_time', 'slot_status', mode='before')
+    @classmethod
+    def serialize_schedule_text(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        if isinstance(v, (bytes, bytearray)):
+            return v.decode('utf-8', errors='replace')
+        return str(v)
+
+
 class DoctorUpcomingAppointmentResponse(BaseModel):
     apt_id: int
     patient_id: int
