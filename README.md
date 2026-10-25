@@ -78,8 +78,8 @@ adbms-mini-project-backend/
    # On Windows (PowerShell):
    .\venv\Scripts\Activate.ps1
 
-   # On Linux/macOS:
-   source venv/bin/activate
+   # Bash :
+   source venv/Scripts/activate
    ```
 
 3. Install dependencies:
@@ -117,7 +117,7 @@ Execute the unified database script in MySQL to create the database, tables, par
 Start the development server with hot-reload enabled:
 
 ```bash
-uvicorn main.py:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload
 ```
 
 Verify application health:
