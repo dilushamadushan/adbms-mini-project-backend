@@ -32,7 +32,9 @@ DELIMITER ;
 
 CALL sp_create_index_safe('Medicines', 'idx_medicines_stock_reorder', 'is_active, stock_qty, reorder_level');
 CALL sp_create_index_safe('Medicines', 'idx_medicines_active_expiry', 'is_active, expiry_date');
+CALL sp_create_index_safe('Medicines', 'idx_medicines_generic_active', 'generic_name, is_active');
 CALL sp_create_index_safe('Dispensations', 'idx_dispensations_date_med', 'dispensed_at, medicine_id');
 CALL sp_create_index_safe('Stock_Receipts', 'idx_receipts_med_date', 'medicine_id, received_at');
+CALL sp_create_index_safe('Purchase_Orders', 'idx_po_status_delivery', 'status, expected_delivery_date');
 
 DROP PROCEDURE IF EXISTS sp_create_index_safe;
