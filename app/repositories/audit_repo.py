@@ -94,61 +94,8 @@ def get_audit_logs(
     risk: Optional[str] = None,
     date: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    # Ensure view exists for stored procedure to work smoothly
     _ensure_audit_view(conn)
 
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.callproc(
-            "sp_get_audit_logs",
-            [
-                page,
-                limit,
-                actor if actor else None,
-                action if action else None,
-                risk if risk else None,
-                date if date else None,
-            ],
-        )
-
-        rows = []
-        for result in cursor.stored_results():
-            rows = result.fetchall()
-            break
-
-        total = 0
-        cleaned_items = []
-        for r in rows:
-            if "total_count" in r and r["total_count"] is not None:
-                total = int(r["total_count"])
-            cleaned_items.append({
-                "log_id": r["log_id"],
-                "timestamp": str(r["timestamp"]),
-                "actor": r["actor"] or "System",
-                "action": r["action"] or "",
-                "resource": r["resource"] or "System",
-                "risk": r["risk"] or "LOW",
-                "details": _parse_details(r.get("details")),
-            })
-
-        return cleaned_items, total
-
-    except Exception as sp_err:
-        logger.warning("sp_get_audit_logs failed, falling back to direct table query: %s", sp_err)
-        return _get_audit_logs_fallback_query(conn, page, limit, actor, action, risk, date)
-    finally:
-        cursor.close()
-
-
-def _get_audit_logs_fallback_query(
-    conn: MySQLConnection,
-    page: int = 1,
-    limit: int = 10,
-    actor: Optional[str] = None,
-    action: Optional[str] = None,
-    risk: Optional[str] = None,
-    date: Optional[str] = None,
-) -> Tuple[List[Dict[str, Any]], int]:
     cursor = conn.cursor(dictionary=True)
     try:
         offset = (page - 1) * limit
@@ -169,8 +116,6 @@ def _get_audit_logs_fallback_query(
             params.append(date.strip())
 
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-
-        # Check if view is usable; otherwise query AUDIT_LOGS_SOURCE inline
         table_source = "vw_audit_logs_enriched" if _VIEW_CREATED else f"{AUDIT_LOGS_SOURCE} AS v"
 
         try:
@@ -193,7 +138,6 @@ def _get_audit_logs_fallback_query(
             cursor.execute(sql, tuple(exec_params))
             rows = cursor.fetchall()
         except mysql.connector.Error:
-            # If view failed with table missing, unconditionally use the inline source
             sql = f"""
                 SELECT 
                     log_id,

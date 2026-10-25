@@ -64,11 +64,28 @@ def get_user_by_username(conn: MySQLConnection, username: str) -> dict:
 def get_all_patients(conn: MySQLConnection) -> list:
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.callproc("GetAllPatients")
-        results = []
-        for result in cursor.stored_results():
-            results.extend(result.fetchall())
-        return results
+        cursor.execute(
+            """
+            SELECT 
+                p.patient_id,
+                p.first_name,
+                p.last_name,
+                p.dob,
+                p.blood_group,
+                p.emergency_contact,
+                p.allergies,
+                u.user_id,
+                u.username,
+                u.email,
+                u.role,
+                u.is_active,
+                p.created_at,
+                p.updated_at
+            FROM Patients p
+            INNER JOIN Users u ON p.user_id = u.user_id
+            """
+        )
+        return cursor.fetchall()
     finally:
         cursor.close()
 
@@ -104,11 +121,24 @@ def get_patient_profile_by_user_id(conn: MySQLConnection, user_id: int) -> dict 
 def get_all_staff(conn: MySQLConnection) -> list:
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.callproc("GetAllStaff")
-        results = []
-        for result in cursor.stored_results():
-            results.extend(result.fetchall())
-        return results
+        cursor.execute(
+            """
+            SELECT 
+                s.staff_id,
+                s.first_name,
+                s.last_name,
+                s.dept_id,
+                s.specialty,
+                u.user_id,
+                u.username,
+                u.email,
+                u.role,
+                u.is_active
+            FROM Staff s
+            INNER JOIN Users u ON s.user_id = u.user_id
+            """
+        )
+        return cursor.fetchall()
     finally:
         cursor.close()
 
@@ -116,7 +146,6 @@ def get_all_staff(conn: MySQLConnection) -> list:
 def get_staff_by_id(conn: MySQLConnection, identifier: int) -> dict | None:
     cursor = conn.cursor(dictionary=True)
     try:
-        # Check by staff_id first
         cursor.execute(
             """
             SELECT 
@@ -141,7 +170,6 @@ def get_staff_by_id(conn: MySQLConnection, identifier: int) -> dict | None:
         if row:
             return row
 
-        # Fallback to check by user_id
         cursor.execute(
             """
             SELECT 
@@ -246,4 +274,4 @@ def delete_staff_user(conn: MySQLConnection, staff_id: int, user_id: int) -> Non
         cursor.execute("DELETE FROM Users WHERE user_id = %s", (user_id,))
         conn.commit()
     finally:
-        cursor.close()
+        cursor.close()

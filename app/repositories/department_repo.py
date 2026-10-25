@@ -78,6 +78,27 @@ def count_staff_in_department(conn: MySQLConnection, dept_id: int) -> int:
         cursor.close()
 
 
+def get_department_staff_count(conn: MySQLConnection, dept_id: int) -> int:
+    return count_staff_in_department(conn, dept_id)
+
+
+def get_department_depth(conn: MySQLConnection, dept_id: int) -> int:
+    cursor = conn.cursor()
+    try:
+        depth = 0
+        current_id = dept_id
+        while depth < 20:
+            cursor.execute("SELECT parent_dept_id FROM Departments WHERE dept_id = %s", (current_id,))
+            row = cursor.fetchone()
+            if not row or row[0] is None:
+                break
+            depth += 1
+            current_id = row[0]
+        return depth
+    finally:
+        cursor.close()
+
+
 def delete_department(conn: MySQLConnection, dept_id: int) -> int:
     cursor = conn.cursor()
     try:
@@ -101,14 +122,4 @@ def get_department_hierarchy_cte(conn: MySQLConnection) -> List[Dict[str, Any]]:
     finally:
         cursor.close()
 
-
-def delete_department_sp(conn: MySQLConnection, dept_id: int) -> None:
-    """
-    Executes transactional stored procedure sp_delete_department with integrity SIGNAL checks.
-    """
-    cursor = conn.cursor()
-    try:
-        cursor.callproc("sp_delete_department", (dept_id,))
-    finally:
-        cursor.close()
 
