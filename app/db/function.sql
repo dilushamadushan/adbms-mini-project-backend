@@ -10,7 +10,13 @@ DROP FUNCTION IF EXISTS fn_get_total_inventory_value;
 DROP FUNCTION IF EXISTS Get_Total_Appointment_Count_According_To_Doctor;
 DROP FUNCTION IF EXISTS Get_Total_Appointment_Count_According_To_Doctor_complted;
 DROP FUNCTION IF EXISTS get_Total_Patients_count_by_docter;
-
+DROP FUNCTION IF EXISTS fn_ward_occupancy_rate;
+DROP FUNCTION IF EXISTS fn_patient_vitals_status;
+DROP FUNCTION IF EXISTS fn_calc_patient_io_balance;
+DROP FUNCTION IF EXISTS fn_check_allergy_conflict ;
+DROP FUNCTION IF EXISTS fn_has_active_prescription_for_med;
+DROP FUNCTION IF EXISTS fn_patient_total_visits;
+DROP FUNCTION IF EXISTS fn_patient_active_rx_count;
 
 DELIMITER //
 
@@ -292,6 +298,184 @@ BEGIN
     RETURN total;
 END //
 
+-- nimhara --
+
+CREATE FUNCTION fn_check_allergy_conflict(
+    p_patient_id INT,
+    p_medicine_name VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+)
+RETURNS BOOLEAN
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_allergies TEXT;
+    DECLARE v_conflict BOOLEAN DEFAULT FALSE;
+
+    SELECT allergies INTO v_allergies
+    FROM Patients
+    WHERE patient_id = p_patient_id;
+
+    IF v_allergies IS NOT NULL AND v_allergies != '' AND v_allergies != 'None' THEN
+        IF INSTR(LOWER(p_medicine_name), LOWER(v_allergies)) > 0 
+           OR INSTR(LOWER(v_allergies), LOWER(p_medicine_name)) > 0 THEN
+            SET v_conflict = TRUE;
+        END IF;
+    END IF;
+
+    RETURN v_conflict;
+END //
+
+CREATE FUNCTION fn_calc_patient_io_balance(
+    p_patient_id INT,
+    p_date DATE
+)
+RETURNS INT
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_total_intake INT DEFAULT 0;
+    DECLARE v_total_output INT DEFAULT 0;
+
+    SELECT COALESCE(SUM(volume_ml), 0) INTO v_total_intake
+    FROM Intake_Output_Logs
+    WHERE patient_id = p_patient_id
+      AND io_type = 'Intake'
+      AND DATE(recorded_at) = COALESCE(p_date, CURDATE());
+
+    SELECT COALESCE(SUM(volume_ml), 0) INTO v_total_output
+    FROM Intake_Output_Logs
+    WHERE patient_id = p_patient_id
+      AND io_type = 'Output'
+      AND DATE(recorded_at) = COALESCE(p_date, CURDATE());
+
+    RETURN (v_total_intake - v_total_output);
+END //
+
+CREATE FUNCTION fn_patient_vitals_status(p_patient_id INT)
+RETURNS VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_bp VARCHAR(20);
+    DECLARE v_pulse INT;
+    DECLARE v_temp DECIMAL(5,2);
+    DECLARE v_spo2 INT;
+    DECLARE v_resp INT;
+    DECLARE v_systolic INT DEFAULT 120;
+    DECLARE v_status VARCHAR(20) DEFAULT 'STABLE';
+
+    SELECT bp, pulse, temperature, spo2, resp_rate
+    INTO v_bp, v_pulse, v_temp, v_spo2, v_resp
+    FROM Vitals_Log
+    WHERE patient_id = p_patient_id
+    ORDER BY recorded_at DESC
+    LIMIT 1;
+
+    IF v_pulse IS NULL THEN
+        RETURN 'STABLE';
+    END IF;
+
+    IF v_bp IS NOT NULL AND INSTR(v_bp, '/') > 0 THEN
+        SET v_systolic = CAST(SUBSTRING_INDEX(v_bp, '/', 1) AS UNSIGNED);
+    END IF;
+
+    IF (v_spo2 IS NOT NULL AND v_spo2 < 92)
+       OR (v_systolic >= 160 OR v_systolic <= 85)
+       OR (v_pulse >= 120 OR v_pulse <= 45)
+       OR (v_temp >= 102.0)
+       OR (v_resp IS NOT NULL AND (v_resp >= 28 OR v_resp <= 8)) THEN
+        SET v_status = 'CRITICAL';
+    ELSEIF (v_spo2 IS NOT NULL AND v_spo2 <= 94)
+       OR (v_systolic >= 135)
+       OR (v_pulse >= 95)
+       OR (v_temp >= 99.5)
+       OR (v_resp IS NOT NULL AND (v_resp >= 22 OR v_resp <= 10)) THEN
+        SET v_status = 'MODERATE';
+    ELSE
+        SET v_status = 'STABLE';
+    END IF;
+
+    RETURN v_status;
+END //
+
+CREATE FUNCTION fn_ward_occupancy_rate(p_ward_id INT)
+RETURNS DECIMAL(5,2)
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_total INT DEFAULT 0;
+    DECLARE v_occupied INT DEFAULT 0;
+    DECLARE v_pct DECIMAL(5,2) DEFAULT 0.00;
+
+    SELECT total_beds INTO v_total FROM Wards WHERE ward_id = p_ward_id;
+    SELECT COUNT(*) INTO v_occupied FROM Beds WHERE ward_id = p_ward_id AND status = 'Occupied';
+
+    IF v_total > 0 THEN
+        SET v_pct = ROUND((v_occupied * 100.0) / v_total, 2);
+    END IF;
+
+    RETURN v_pct;
+END //
+
+-- maleesha -- 
+
+CREATE FUNCTION fn_patient_active_rx_count(
+    p_patient_id INT
+)
+RETURNS INT
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_count INT DEFAULT 0;
+
+    SELECT COUNT(rx.rx_id) INTO v_count
+    FROM `Prescriptions` rx
+    JOIN `Medical_Records` mr ON rx.record_id = mr.record_id
+    WHERE mr.patient_id = p_patient_id
+      AND LOWER(rx.status) = 'active';
+
+    RETURN v_count;
+END //
+
+CREATE FUNCTION fn_patient_total_visits(
+    p_patient_id INT
+)
+RETURNS INT
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_total INT DEFAULT 0;
+
+    SELECT COUNT(record_id) INTO v_total
+    FROM `Medical_Records`
+    WHERE `patient_id` = p_patient_id;
+
+    RETURN v_total;
+END //
+
+CREATE FUNCTION fn_has_active_prescription_for_med(
+    p_patient_id INT,
+    p_med_name   VARCHAR(100)
+)
+RETURNS BOOLEAN
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_exists BOOLEAN DEFAULT FALSE;
+
+    IF EXISTS (
+        SELECT 1
+        FROM `Prescriptions` rx
+        JOIN `Medical_Records` mr ON rx.record_id = mr.record_id
+        WHERE mr.patient_id = p_patient_id
+          AND LOWER(rx.status) = 'active'
+          AND LOWER(TRIM(rx.med_name)) = LOWER(TRIM(p_med_name))
+    ) THEN
+        SET v_exists = TRUE;
+    END IF;
+
+    RETURN v_exists;
+END //
 
 DELIMITER ;
 
